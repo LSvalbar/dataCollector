@@ -8,6 +8,12 @@
 
 如果你手里只有 `fwlib32.dll`，这版程序不能直接用，因为当前机器是 64 位 Python。
 
+补充说明：
+
+1. 我已经把 DLL 的目标目录准备好了。
+2. 但我没法替你自动下载官方 DLL，因为供应方下载页面要求登录。
+3. 所以这一步现在只能等你把合法取得的 `fwlib64.dll` 放进去。
+
 ## 2. 已经给你预填好的配置
 
 配置文件已经按你当前机床 IP 预填好了：
@@ -22,6 +28,12 @@
 4. 快照落盘周期：`5000ms`
 
 ## 3. 启动方式
+
+### 方式 0：启动 GUI 图形界面
+
+```powershell
+powershell -ExecutionPolicy Bypass -File D:\Project\Codex\DataCollector\scripts\Start-FanucCollectorGui.ps1
+```
 
 ### 方式 A：直接运行 PowerShell 脚本
 

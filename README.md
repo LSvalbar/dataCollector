@@ -15,6 +15,7 @@
 5. 记录状态变化事件。
 6. 统计派生的开机累计时长、运行累计时长。
 7. 支持导出 CSV。
+8. 提供本地 GUI 图形界面。
 
 ## 当前采集字段
 
@@ -35,7 +36,7 @@
 2. `config/`
    机床配置文件。
 3. `scripts/`
-   启动脚本和网络预检脚本。
+   启动脚本、GUI 启动脚本和网络预检脚本。
 4. `src/fanuc_collector/`
    采集核心代码。
 5. `docs/`
@@ -66,6 +67,7 @@ D:\Project\Codex\DataCollector\vendor\fwlib64.dll
 1. 这版程序当前按 `64 位 Python + fwlib64.dll` 运行。
 2. 如果你手里只有 `fwlib32.dll`，这版不能直接运行。
 3. 如果需要，我下一步可以再给你做 32 位兼容版。
+4. 我已经把 DLL 放置目录准备好了，但无法替你自动下载官方 DLL，因为供应方下载页面要求登录。
 
 ### 3. 检查机床网络
 
@@ -101,6 +103,18 @@ powershell -ExecutionPolicy Bypass -File D:\Project\Codex\DataCollector\scripts\
    当前先按 `[1, 2, 3]` 作为运行时间累计口径
 
 ## 怎么运行
+
+### 方式 0：启动 GUI 图形界面
+
+如果你希望尽量少敲命令，直接用这个：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File D:\Project\Codex\DataCollector\scripts\Start-FanucCollectorGui.ps1
+```
+
+对应脚本文件：
+
+[scripts/Start-FanucCollectorGui.ps1](D:/Project/Codex/DataCollector/scripts/Start-FanucCollectorGui.ps1)
 
 ### 方式 A：直接运行启动脚本
 
@@ -175,7 +189,7 @@ python D:\Project\Codex\DataCollector\run_collector.py export-snapshots --db D:\
 ## 现在你最需要做的事
 
 1. 放入 `fwlib64.dll`
-2. 运行启动脚本
+2. 优先运行 GUI 启动脚本
 3. 执行 `show-latest`
 4. 把日志文件前几十行和 `show-latest` 输出发给我
 

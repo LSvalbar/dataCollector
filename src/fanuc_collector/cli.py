@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from .config import load_config
+from .gui import launch_gui
 from .runtime import CollectorRuntime
 from .storage import export_snapshots_to_csv, read_latest_values
 
@@ -22,6 +23,9 @@ def main() -> int:
     export_parser.add_argument("--db", required=True, help="Path to SQLite database")
     export_parser.add_argument("--out", required=True, help="Path to CSV output")
 
+    gui_parser = subparsers.add_parser("gui", help="Start GUI")
+    gui_parser.add_argument("--config", required=True, help="Path to JSON config")
+
     args = parser.parse_args()
 
     if args.command == "run":
@@ -38,5 +42,8 @@ def main() -> int:
         export_snapshots_to_csv(args.db, args.out)
         print(f"Snapshots exported to {Path(args.out).resolve()}")
         return 0
+
+    if args.command == "gui":
+        return launch_gui(args.config)
 
     return 1
