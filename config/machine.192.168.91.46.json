@@ -1,0 +1,25 @@
+{
+  "machine": {
+    "name": "fanuc-poc-192.168.91.46",
+    "ip": "192.168.91.46",
+    "port": 8193,
+    "connect_timeout_sec": 10,
+    "poll_interval_ms": 500,
+    "snapshot_interval_ms": 5000,
+    "running_operation_modes": [1, 2, 3],
+    "focas_dll_path": "vendor/fwlib64.dll",
+    "mock_mode": false
+  },
+  "storage": {
+    "db_path": "data/fanuc-poc-192.168.91.46.db",
+    "queue_max_size": 10000,
+    "writer_batch_size": 200
+  },
+  "runtime": {
+    "log_path": "logs/fanuc-poc-192.168.91.46.log",
+    "log_level": "INFO",
+    "reconnect_initial_ms": 1000,
+    "reconnect_max_ms": 30000
+  }
+}
+
