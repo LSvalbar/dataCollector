@@ -78,3 +78,11 @@ class WriteEnvelope:
     snapshot: MachineStatus | None = None
     transitions: list[StateTransition] = field(default_factory=list)
     counter_delta: CounterDelta | None = None
+
+
+@dataclass(slots=True)
+class TimelineSegment:
+    state_code: str
+    start_at: datetime
+    end_at: datetime
+    duration_ms: int

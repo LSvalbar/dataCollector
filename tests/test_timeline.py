@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+import sqlite3
+import tempfile
+from pathlib import Path
+import shutil
+import unittest
+from datetime import timezone
+
+from src.fanuc_collector.storage import StorageWriter, read_daily_timeline
+
+
+class TimelineReportTest(unittest.TestCase):
+    def test_read_daily_timeline_returns_processing_and_power_off_segments(self) -> None:
+        temp_dir = tempfile.mkdtemp(prefix="fanuc-timeline-test-")
+        try:
+            db_path = Path(temp_dir) / "timeline.db"
+            writer = StorageWriter(str(db_path), max_queue_size=10, batch_size=10)
+
+            with sqlite3.connect(db_path) as connection:
+                writer._init_schema(connection)
+                connection.executemany(
+                    """
+                    INSERT INTO poll_snapshots (
+                        collected_at,
+                        machine_online,
+                        automatic_mode,
+                        operation_mode,
+                        emergency_state,
+                        alarm_state,
+                        controller_mode_number,
+                        controller_mode_text,
+                        oee_status_number,
+                        oee_status_text,
+                        raw_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        ("2026-03-10T09:00:00.000+00:00", 1, 1, 1, 0, 0, 1, "Memory", 3, "Running", "{}"),
+                        ("2026-03-10T09:30:00.000+00:00", 1, 1, 0, 0, 0, 1, "Memory", 4, "Interrupted", "{}"),
+                        ("2026-03-10T17:05:32.000+00:00", 0, -1, -1, 0, 0, -1, "Offline", 0, "Offline", "{}"),
+                        ("2026-03-10T20:05:32.000+00:00", 1, 1, 0, 0, 0, 1, "Memory", 4, "Interrupted", "{}"),
+                    ],
+                )
+                connection.commit()
+
+            segments = read_daily_timeline(
+                str(db_path),
+                "2026-03-10",
+                running_modes=[1, 2, 3],
+                report_tz=timezone.utc,
+            )
+
+            processing_segment = next(segment for segment in segments if segment.state_code == "processing")
+            power_off_segment = next(segment for segment in segments if segment.state_code == "power_off")
+
+            self.assertEqual(processing_segment.duration_ms, 30 * 60 * 1000)
+            self.assertEqual(power_off_segment.duration_ms, 3 * 60 * 60 * 1000)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    unittest.main()

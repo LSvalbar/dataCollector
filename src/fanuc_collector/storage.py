@@ -5,10 +5,10 @@ import json
 import queue
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone, tzinfo as tzinfo_type
 from pathlib import Path
 
-from .models import CounterDelta, MachineStatus, WriteEnvelope, isoformat_utc
+from .models import CounterDelta, MachineStatus, TimelineSegment, WriteEnvelope, isoformat_utc
 
 
 _SENTINEL = object()
@@ -341,6 +341,144 @@ def _latest_counter_keys(connection: sqlite3.Connection, day: str) -> dict[str, 
         "today_power_on_ms": (str(power_on_ms), updated_at),
         "today_processing_ms": (str(run_ms), updated_at),
     }
+
+
+def read_daily_timeline(
+    db_path: str,
+    day_text: str,
+    running_modes: list[int],
+    report_tz: tzinfo_type | None = None,
+) -> list[TimelineSegment]:
+    timezone_value = _resolve_report_timezone(report_tz)
+    day_value = date.fromisoformat(day_text)
+    start_local = datetime.combine(day_value, time.min, tzinfo=timezone_value)
+    end_local = start_local + timedelta(days=1)
+    now_local = datetime.now(timezone_value)
+
+    if day_value == now_local.date() and now_local < end_local:
+        end_local = now_local
+
+    start_utc = start_local.astimezone(timezone.utc)
+    end_utc = end_local.astimezone(timezone.utc)
+    start_utc_text = isoformat_utc(start_utc)
+    end_utc_text = isoformat_utc(end_utc)
+
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+
+        previous_row = connection.execute(
+            """
+            SELECT
+                collected_at,
+                machine_online,
+                operation_mode,
+                emergency_state,
+                alarm_state
+            FROM poll_snapshots
+            WHERE collected_at < ?
+            ORDER BY collected_at DESC
+            LIMIT 1
+            """,
+            (start_utc_text,),
+        ).fetchone()
+
+        rows = list(
+            connection.execute(
+                """
+                SELECT
+                    collected_at,
+                    machine_online,
+                    operation_mode,
+                    emergency_state,
+                    alarm_state
+                FROM poll_snapshots
+                WHERE collected_at >= ? AND collected_at <= ?
+                ORDER BY collected_at ASC
+                """,
+                (start_utc_text, end_utc_text),
+            )
+        )
+
+    points = []
+    if previous_row is not None:
+        points.append(previous_row)
+    points.extend(rows)
+
+    if not points:
+        return []
+
+    segments: list[TimelineSegment] = []
+    running_mode_set = set(running_modes)
+
+    for index, row in enumerate(points):
+        current_at = datetime.fromisoformat(row["collected_at"])
+        next_at = end_utc if index + 1 >= len(points) else datetime.fromisoformat(points[index + 1]["collected_at"])
+        interval_start = max(current_at, start_utc)
+        interval_end = min(next_at, end_utc)
+        if interval_end <= interval_start:
+            continue
+
+        state_code = _timeline_state_code(
+            machine_online=int(row["machine_online"]),
+            operation_mode=int(row["operation_mode"]),
+            emergency_state=int(row["emergency_state"]),
+            alarm_state=int(row["alarm_state"]),
+            running_modes=running_mode_set,
+        )
+        _append_timeline_segment(segments, state_code, interval_start, interval_end)
+
+    return segments
+
+
+def _resolve_report_timezone(report_tz: tzinfo_type | None) -> tzinfo_type:
+    if report_tz is not None:
+        return report_tz
+    local_timezone = datetime.now().astimezone().tzinfo
+    return local_timezone or timezone.utc
+
+
+def _timeline_state_code(
+    machine_online: int,
+    operation_mode: int,
+    emergency_state: int,
+    alarm_state: int,
+    running_modes: set[int],
+) -> str:
+    if machine_online == 0:
+        return "power_off"
+    if emergency_state:
+        return "emergency"
+    if alarm_state:
+        return "alarm"
+    if operation_mode in running_modes:
+        return "processing"
+    return "idle"
+
+
+def _append_timeline_segment(
+    segments: list[TimelineSegment],
+    state_code: str,
+    start_at: datetime,
+    end_at: datetime,
+) -> None:
+    duration_ms = max(0, int((end_at - start_at).total_seconds() * 1000))
+    if duration_ms <= 0:
+        return
+
+    if segments and segments[-1].state_code == state_code and segments[-1].end_at == start_at:
+        last_segment = segments[-1]
+        last_segment.end_at = end_at
+        last_segment.duration_ms += duration_ms
+        return
+
+    segments.append(
+        TimelineSegment(
+            state_code=state_code,
+            start_at=start_at,
+            end_at=end_at,
+            duration_ms=duration_ms,
+        )
+    )
 
 
 def export_snapshots_to_csv(db_path: str, output_path: str) -> None:

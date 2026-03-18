@@ -4,24 +4,22 @@
 
 当前交付分成两条路线：
 
-1. 源码开发路线：在开发电脑改代码、调试、打包。
-2. 发布包测试路线：把打包后的目录拷到任意 Windows 电脑，直接双击 `dataCollector.exe`。
+1. 源码开发：在开发电脑改代码、调试、打包。
+2. 发布包测试：把打包后的目录复制到任意 Windows 电脑，直接双击 `dataCollector.exe`。
 
 ## 当前推荐
 
-如果你的目标是去公司笔记本连机床测试，不要再运行源码里的 `bat` 或 `ps1`。
-
-优先使用打包后的发布目录：
+如果你的目标是去公司笔记本连机床测试，优先使用打包后的发布目录：
 
 `dist\dataCollector`
 
-把整个目录复制到笔记本或 U 盘里都可以，然后直接执行：
+复制整个目录到目标电脑后，直接运行：
 
 `dist\dataCollector\dataCollector.exe`
 
 注意：
 
-不是只拷贝一个 exe 文件，而是拷贝整个 `dataCollector` 目录。
+不是只复制一个 exe 文件，而是复制整个 `dataCollector` 目录。
 
 ## 一次打包
 
@@ -31,11 +29,11 @@
 powershell -ExecutionPolicy Bypass -File .\scripts\Build-PortableExe.ps1
 ```
 
-打包成功后，输出目录为：
+打包成功后输出目录为：
 
 `dist\dataCollector`
 
-目录里会包含：
+目录中会包含：
 
 1. `dataCollector.exe`
 2. Python 运行时依赖
@@ -51,7 +49,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Build-PortableExe.ps1
 
 `dist\dataCollector`
 
-目标电脑上的路径可以随意，例如：
+目标电脑上的路径可以任意，例如：
 
 `D:\dataCollector`
 
@@ -113,9 +111,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Build-PortableExe.ps1
 2. 确认机床 IP 可达。
 3. 双击 `dataCollector.exe`。
 4. 在 GUI 中检查配置。
-5. 点击 `Save Config`。
-6. 点击 `Start Collector`。
-7. 观察右侧日志和左侧最新值。
+5. 点击“保存配置”。
+6. 点击“启动采集”。
+7. 观察“最新采集值”和“日志尾部”。
+8. 切到“时间统计”页，按日期查看机床当天每个时间段的状态。
 
 ## 网络预检
 
@@ -162,6 +161,25 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Test-MachineEndpoint.ps1 -IpA
 1. `today_processing_ms` 当前第一版是按 `operation_mode` 是否属于 `running_operation_modes` 推导的加工累计时间。
 2. `observed_power_on_at` 和 `observed_power_off_at` 是采集程序观测到的在线/离线切换时间，不等同于 CNC 内部原始断电时间。
 
+## 时间统计页
+
+GUI 已新增“时间统计”页，可以按天查看机床时间轴。表格列为：
+
+1. 状态
+2. 时长
+3. 开始时间
+4. 截止时间
+
+当前状态分类规则：
+
+1. `加工`：机床在线，且 `operation_mode` 命中 `running_operation_modes`
+2. `关机`：机床离线
+3. `报警`：机床在线且报警中
+4. `急停`：机床在线且急停中
+5. `待机`：除以上以外的在线状态
+
+这页的目的就是让你按时间段看出机床每天都干了什么。
+
 ## 源码模式
 
 如果你还在开发电脑上直接跑源码，仍然可以使用：
@@ -180,7 +198,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Test-MachineEndpoint.ps1 -IpA
 
 1. 不依赖目标电脑预装 Python
 2. 不依赖目标电脑单独配置项目路径
-3. 不依赖手动拷贝 FOCAS 主 DLL
+3. 不依赖手动复制 FOCAS 主 DLL
 4. 相对路径统一以 EXE 所在目录为基准
 
 ## 仍然需要现场满足的条件
