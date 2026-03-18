@@ -63,10 +63,20 @@ class SmokeTest(unittest.TestCase):
                 snapshot_count = connection.execute("SELECT COUNT(*) FROM poll_snapshots").fetchone()[0]
                 transition_count = connection.execute("SELECT COUNT(*) FROM state_transitions").fetchone()[0]
                 latest_count = connection.execute("SELECT COUNT(*) FROM latest_values").fetchone()[0]
+                latest_map = {
+                    key: value_text
+                    for key, value_text, _ in connection.execute(
+                        "SELECT key, value_text, updated_at FROM latest_values"
+                    )
+                }
 
             self.assertGreater(snapshot_count, 0)
             self.assertGreater(transition_count, 0)
             self.assertGreater(latest_count, 0)
+            self.assertIn("today_power_on_ms", latest_map)
+            self.assertIn("today_processing_ms", latest_map)
+            self.assertGreater(int(latest_map["today_power_on_ms"]), 0)
+            self.assertGreaterEqual(int(latest_map["today_processing_ms"]), 0)
         finally:
             time.sleep(0.2)
             shutil.rmtree(temp_dir, ignore_errors=True)

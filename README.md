@@ -140,6 +140,28 @@ powershell -ExecutionPolicy Bypass -File .\scripts\Test-MachineEndpoint.ps1 -IpA
 
 这些都在 EXE 所在目录下，不依赖固定盘符。
 
+## 当前已采集的主要数据
+
+当前版本已经采集并落库这些数据：
+
+1. 机床基础信息：系列、版本、轴数等
+2. 在线状态：`machine_online`
+3. 自动模式：`automatic_mode`
+4. 运行模式：`operation_mode`
+5. 报警状态：`alarm_state`
+6. 急停状态：`emergency_state`
+7. 控制器模式：`controller_mode_text`
+8. OEE 状态：`oee_status_text`
+9. 当日开机累计时间：`today_power_on_ms`
+10. 当日加工累计时间：`today_processing_ms`
+11. 观测开机时间：`observed_power_on_at`
+12. 观测关机时间：`observed_power_off_at`
+
+说明：
+
+1. `today_processing_ms` 当前第一版是按 `operation_mode` 是否属于 `running_operation_modes` 推导的加工累计时间。
+2. `observed_power_on_at` 和 `observed_power_off_at` 是采集程序观测到的在线/离线切换时间，不等同于 CNC 内部原始断电时间。
+
 ## 源码模式
 
 如果你还在开发电脑上直接跑源码，仍然可以使用：

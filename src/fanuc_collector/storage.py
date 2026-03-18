@@ -135,6 +135,7 @@ class StorageWriter:
 
     def _flush(self, connection: sqlite3.Connection, pending: list[WriteEnvelope]) -> None:
         latest_rows: dict[str, tuple[str, str]] = {}
+        counter_days_to_refresh: set[str] = set()
 
         with connection:
             for envelope in pending:
@@ -173,6 +174,7 @@ class StorageWriter:
                     latest_rows.update(_latest_values_from_snapshot(snapshot))
 
                 if envelope.transitions:
+                    latest_rows.update(_latest_values_from_transitions(envelope.transitions))
                     connection.executemany(
                         """
                         INSERT INTO state_transitions (
@@ -241,6 +243,7 @@ class StorageWriter:
                 if envelope.counter_delta is not None:
                     counter = envelope.counter_delta
                     day = counter.collected_at.astimezone(timezone.utc).date().isoformat()
+                    counter_days_to_refresh.add(day)
                     connection.execute(
                         """
                         INSERT INTO daily_counters (
@@ -271,6 +274,9 @@ class StorageWriter:
                         ),
                     )
 
+            for day in sorted(counter_days_to_refresh):
+                latest_rows.update(_latest_counter_keys(connection, day))
+
             if latest_rows:
                 connection.executemany(
                     """
@@ -299,6 +305,41 @@ def _latest_values_from_snapshot(snapshot: MachineStatus) -> dict[str, tuple[str
         "controller_mode_text": (snapshot.controller_mode_text, updated_at),
         "oee_status_number": (str(snapshot.oee_status_number), updated_at),
         "oee_status_text": (snapshot.oee_status_text, updated_at),
+    }
+
+
+def _latest_values_from_transitions(transitions) -> dict[str, tuple[str, str]]:
+    latest_rows: dict[str, tuple[str, str]] = {}
+    for transition in transitions:
+        if transition.state_key != "machine_online":
+            continue
+
+        changed_at = isoformat_utc(transition.changed_at)
+        if transition.previous_value == "0" and transition.current_value == "1":
+            latest_rows["observed_power_on_at"] = (changed_at, changed_at)
+        elif transition.previous_value == "1" and transition.current_value == "0":
+            latest_rows["observed_power_off_at"] = (changed_at, changed_at)
+
+    return latest_rows
+
+
+def _latest_counter_keys(connection: sqlite3.Connection, day: str) -> dict[str, tuple[str, str]]:
+    row = connection.execute(
+        """
+        SELECT power_on_ms, run_ms, updated_at
+        FROM daily_counters
+        WHERE day = ?
+        """,
+        (day,),
+    ).fetchone()
+    if row is None:
+        return {}
+
+    power_on_ms, run_ms, updated_at = row
+    return {
+        "counter_day": (day, updated_at),
+        "today_power_on_ms": (str(power_on_ms), updated_at),
+        "today_processing_ms": (str(run_ms), updated_at),
     }
 
 
@@ -355,4 +396,3 @@ def read_latest_values(db_path: str) -> list[tuple[str, str, str]]:
                 """
             )
         )
-
