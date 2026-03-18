@@ -1,6 +1,6 @@
 {
   "machine": {
-    "name": "fanuc-lathe-01",
+    "name": "fanuc-notebook-test",
     "ip": "192.168.91.46",
     "port": 8193,
     "connect_timeout_sec": 10,
@@ -11,12 +11,12 @@
     "mock_mode": false
   },
   "storage": {
-    "db_path": "data/fanuc-lathe-01.db",
+    "db_path": "data/fanuc-notebook-test.db",
     "queue_max_size": 10000,
     "writer_batch_size": 200
   },
   "runtime": {
-    "log_path": "logs/fanuc-lathe-01.log",
+    "log_path": "logs/fanuc-notebook-test.log",
     "log_level": "INFO",
     "reconnect_initial_ms": 1000,
     "reconnect_max_ms": 30000

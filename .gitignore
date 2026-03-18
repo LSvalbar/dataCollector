@@ -8,5 +8,9 @@ venv/
 data/
 logs/
 tmp/
+config/machine.local.json
+fanucdata.zip
+fwlib/
+runtime/
 vendor/*.dll
 vendor/*.DLL

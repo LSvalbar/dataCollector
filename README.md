@@ -1,202 +1,196 @@
 # dataCollector
 
-用于笔记本或采集主机通过以太网直连 FANUC 机床进行单机数采的第一版程序。
+用于 FANUC 机床单机数采验证的本地采集程序。
 
-当前这版先聚焦一件事：
+当前使用方式已经收敛成：
 
-`先稳定采到一台机床的数据，并把数据可靠落到本地 SQLite。`
+`在本机开发，在公司笔记本上只改配置、双击启动、连机测试。`
 
-## 当前能力
+## 现在的推荐流程
 
-1. 通过 `FOCAS over Ethernet` 连接 FANUC 机床。
-2. 固定周期轮询机床状态。
-3. 自动重连，网络抖动后继续采集。
-4. 本地落库到 SQLite。
-5. 记录状态变化事件。
-6. 统计派生的开机累计时长、运行累计时长。
-7. 支持导出 CSV。
-8. 提供本地 GUI 图形界面。
+1. 在你自己的电脑上开发代码
+2. 把整个工程目录复制到公司笔记本
+3. 在笔记本上只改 `config/machine.local.json`
+4. 双击 `Start-GUI.bat`
+5. 连接机床后看 GUI 和日志
 
-## 当前采集字段
+## 复制到笔记本时必须一起带上的目录
 
-1. 系统信息
-2. 自动模式号
-3. 运行模式号
-4. 急停状态
-5. 报警状态
-6. 控制器模式文本
-7. OEE 状态文本
-8. 派生的开机累计时长
-9. 派生的运行累计时长
+1. `config/`
+2. `scripts/`
+3. `src/`
+4. `vendor/`
+5. `runtime/`
 
-## 目录说明
+其中：
 
-1. `run_collector.py`
-   程序入口。
-2. `config/`
-   机床配置文件。
-3. `scripts/`
-   启动脚本、GUI 启动脚本和网络预检脚本。
-4. `src/fanuc_collector/`
-   采集核心代码。
-5. `docs/`
-   方案和操作文档。
+1. `vendor/` 里是当前默认使用的 `32 位 FOCAS DLL`
+2. `runtime/` 里是工程内置的 `32 位 Python 3.11`
 
-## 运行前准备
+只要这两个目录也在，笔记本一般不需要再额外装 Python 和 DLL。
 
-### 1. 准备 Python
+## 当前默认 DLL
 
-当前程序基于 `Python 3.11+`。
+当前默认读取：
 
-检查命令：
+`vendor/Fwlib32.dll`
 
-```powershell
-python --version
-```
+也就是工程根目录下的：
 
-### 2. 准备 FOCAS DLL
+`vendor/Fwlib32.dll`
 
-把 `fwlib64.dll` 放到下面目录：
+并且我已经把相关依赖 DLL 一起整理进 `vendor/` 了。
 
-```text
-D:\Project\Codex\DataCollector\vendor\fwlib64.dll
-```
+## 当前默认启动方式
 
-注意：
+优先使用 GUI。
 
-1. 这版程序当前按 `64 位 Python + fwlib64.dll` 运行。
-2. 如果你手里只有 `fwlib32.dll`，这版不能直接运行。
-3. 如果需要，我下一步可以再给你做 32 位兼容版。
-4. 我已经把 DLL 放置目录准备好了，但无法替你自动下载官方 DLL，因为供应方下载页面要求登录。
+直接双击根目录：
 
-### 3. 检查机床网络
+`Start-GUI.bat`
 
-先确认笔记本能和机床正常通信：
+它会调用：
+
+`scripts/Start-FanucCollectorGui.ps1`
+
+并优先使用工程自带的：
+
+`runtime/python311-win32/python.exe`
+
+## 配置文件怎么用
+
+### 1. 测试时只改这个文件
+
+笔记本测试时，优先使用：
+
+`config/machine.local.json`
+
+这个文件不会提交到 Git。
+
+### 2. 第一次启动时会自动生成
+
+如果 `config/machine.local.json` 不存在，启动脚本会自动从下面这个模板复制一份：
+
+`config/machine.local.example.json`
+
+### 3. 你真正要改的字段
+
+只要重点改下面几个：
+
+1. `machine.name`
+   机床名称
+2. `machine.ip`
+   机床 IP
+3. `machine.port`
+   一般先用 `8193`
+4. `machine.running_operation_modes`
+   先保持 `[1, 2, 3]`
+5. `storage.db_path`
+   本地数据库文件路径
+6. `runtime.log_path`
+   本地日志文件路径
+
+DLL 路径默认已经是：
+
+`vendor/Fwlib32.dll`
+
+一般不用改。
+
+## 笔记本上的最简操作
+
+### 第一步：复制整个工程目录
+
+例如复制到：
+
+`D:\dataCollector`
+
+或者：
+
+`C:\Users\你的用户名\Desktop\dataCollector`
+
+都可以。
+
+启动脚本现在已经改成相对路径，不依赖固定盘符。
+
+### 第二步：修改本地配置
+
+打开：
+
+`config/machine.local.json`
+
+如果没有这个文件，就先双击一次 `Start-GUI.bat`，脚本会自动生成。
+
+### 第三步：确认机床网络
+
+笔记本连到机床网络后，可以先测：
 
 ```powershell
 Test-NetConnection 192.168.91.46 -Port 8193
 ```
 
-或者运行预检脚本：
+或者运行工程自带脚本：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File D:\Project\Codex\DataCollector\scripts\Test-MachineEndpoint.ps1 -IpAddress 192.168.91.46 -Ports 8193 -OutputPath D:\Project\Codex\DataCollector\machine-precheck.json
+powershell -ExecutionPolicy Bypass -File .\scripts\Test-MachineEndpoint.ps1 -IpAddress 192.168.91.46 -Ports 8193 -OutputPath .\machine-precheck.json
 ```
 
-## 配置文件
+### 第四步：双击启动
 
-已经按你当前测试机床预填好一个配置：
+双击：
 
-[config/machine.192.168.91.46.json](D:/Project/Codex/DataCollector/config/machine.192.168.91.46.json)
+`Start-GUI.bat`
 
-关键参数如下：
+### 第五步：在 GUI 里操作
 
-1. `ip`
-   当前机床 IP，默认 `192.168.91.46`
-2. `port`
-   默认 `8193`
-3. `poll_interval_ms`
-   轮询周期，默认 `500ms`
-4. `snapshot_interval_ms`
-   快照落盘周期，默认 `5000ms`
-5. `running_operation_modes`
-   当前先按 `[1, 2, 3]` 作为运行时间累计口径
+1. 检查 IP、端口、DLL 路径
+2. 点 `Save Config`
+3. 点 `Start Collector`
+4. 看日志窗口
+5. 看最新值窗口
 
-## 怎么运行
+### 第六步：看输出文件
 
-### 方式 0：启动 GUI 图形界面
+默认会生成：
 
-如果你希望尽量少敲命令，直接用这个：
+1. `data/*.db`
+2. `logs/*.log`
+
+## 如果不用 GUI
+
+也可以直接运行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File D:\Project\Codex\DataCollector\scripts\Start-FanucCollectorGui.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\Start-FanucCollector.ps1
 ```
 
-对应脚本文件：
+## 首次现场测试重点看什么
 
-[scripts/Start-FanucCollectorGui.ps1](D:/Project/Codex/DataCollector/scripts/Start-FanucCollectorGui.ps1)
+第一次不要只看“有没有数据”，要重点看：
 
-### 方式 A：直接运行启动脚本
+1. `alarm_state` 是否跟报警一致
+2. `emergency_state` 是否跟急停一致
+3. `operation_mode` 在空闲、运行、暂停时分别是多少
+4. `controller_mode_text` 是否和现场模式一致
 
-这是最简单的方式：
+`running_operation_modes` 现在先按 `[1, 2, 3]` 处理，只是第一版默认值。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File D:\Project\Codex\DataCollector\scripts\Start-FanucCollector.ps1
-```
+等你测试完，把这 3 个状态告诉我：
 
-对应脚本文件：
+1. 空闲时 `operation_mode`
+2. 运行时 `operation_mode`
+3. 暂停时 `operation_mode`
 
-[scripts/Start-FanucCollector.ps1](D:/Project/Codex/DataCollector/scripts/Start-FanucCollector.ps1)
+我再继续把“运行时间”的判断规则校准掉。
 
-### 方式 B：直接运行 Python 命令
+## 当前结论
 
-```powershell
-python D:\Project\Codex\DataCollector\run_collector.py run --config D:\Project\Codex\DataCollector\config\machine.192.168.91.46.json
-```
+你后面到笔记本上：
 
-## 运行后会生成什么
+1. 不需要固定工程路径
+2. 不需要再自己装 Python
+3. 不需要再自己找 `fwlib64.dll`
+4. 只要把整个工程目录复制过去
+5. 修改 `config/machine.local.json`
+6. 双击 `Start-GUI.bat`
 
-### 1. SQLite 数据库
-
-```text
-D:\Project\Codex\DataCollector\data\fanuc-poc-192.168.91.46.db
-```
-
-### 2. 运行日志
-
-```text
-D:\Project\Codex\DataCollector\logs\fanuc-poc-192.168.91.46.log
-```
-
-## 怎么看采集结果
-
-### 1. 查看最新值
-
-```powershell
-python D:\Project\Codex\DataCollector\run_collector.py show-latest --db D:\Project\Codex\DataCollector\data\fanuc-poc-192.168.91.46.db
-```
-
-### 2. 导出快照 CSV
-
-```powershell
-python D:\Project\Codex\DataCollector\run_collector.py export-snapshots --db D:\Project\Codex\DataCollector\data\fanuc-poc-192.168.91.46.db --out D:\Project\Codex\DataCollector\data\fanuc-poc-192.168.91.46.csv
-```
-
-## 首次现场测试建议
-
-第一次到现场，不要只看“有没有数据”，要同时看下面几点：
-
-1. `alarm_state` 在报警和非报警时是否变化正确。
-2. `emergency_state` 在急停和非急停时是否变化正确。
-3. `operation_mode` 在空闲、自动运行、暂停时分别是多少。
-4. `controller_mode_text` 是否与机床当前模式一致。
-5. 日志里是否有重连、报错、超时。
-
-特别注意：
-
-`running_operation_modes` 当前默认是 `[1, 2, 3]`，这是第一版经验值，不一定和你的现场完全一致。
-
-也就是说，程序现在会把 `operation_mode = 1/2/3` 先视为“运行时间累计”。
-
-你第一次现场测试后，要把这几个状态对应关系告诉我：
-
-1. 空闲时 `operation_mode` 是多少
-2. 自动运行时 `operation_mode` 是多少
-3. 暂停时 `operation_mode` 是多少
-
-我拿到这三个值后，就能把“运行时间”的判断规则校准准确。
-
-## 现在你最需要做的事
-
-1. 放入 `fwlib64.dll`
-2. 优先运行 GUI 启动脚本
-3. 执行 `show-latest`
-4. 把日志文件前几十行和 `show-latest` 输出发给我
-
-## 相关文件
-
-[总体方案](D:/Project/Codex/DataCollector/docs/architecture-proposal.md)
-
-[单机验证计划](D:/Project/Codex/DataCollector/docs/single-machine-poc-plan.md)
-
-[快速开始](D:/Project/Codex/DataCollector/docs/quick-start-zh.md)
+就可以开始测。

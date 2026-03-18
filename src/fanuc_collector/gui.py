@@ -116,7 +116,7 @@ class CollectorGui:
                 "poll_interval_ms": 500,
                 "snapshot_interval_ms": 5000,
                 "running_operation_modes": [1, 2, 3],
-                "focas_dll_path": "vendor/fwlib64.dll",
+                "focas_dll_path": "vendor/Fwlib32.dll",
                 "mock_mode": False,
             },
             "storage": {

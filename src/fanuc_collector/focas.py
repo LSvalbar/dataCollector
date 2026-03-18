@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import POINTER, byref, c_char, c_char_p, c_long, c_short, c_ushort
+import os
 from pathlib import Path
 
 from .models import MachineStatus, SystemInfo, utc_now
@@ -90,10 +91,13 @@ class FocasClient:
         self._running_modes = set(running_modes)
         self._lib = None
         self._handle = c_ushort(0)
+        self._dll_directory = None
 
     def connect(self) -> None:
         if not self._dll_path.exists():
             raise FocasLibraryLoadError(f"FOCAS DLL not found: {self._dll_path}")
+
+        self._dll_directory = os.add_dll_directory(str(self._dll_path.parent))
 
         try:
             self._lib = ctypes.WinDLL(str(self._dll_path))
@@ -122,9 +126,15 @@ class FocasClient:
 
     def disconnect(self) -> None:
         if self._lib is None or self._handle.value == 0:
+            if self._dll_directory is not None:
+                self._dll_directory.close()
+                self._dll_directory = None
             return
         self._lib.cnc_freelibhndl(self._handle)
         self._handle = c_ushort(0)
+        if self._dll_directory is not None:
+            self._dll_directory.close()
+            self._dll_directory = None
 
     def read_system_info(self) -> SystemInfo:
         self._ensure_connected()
@@ -189,4 +199,3 @@ class FocasClient:
     def _ensure_connected(self) -> None:
         if self._lib is None or self._handle.value == 0:
             raise FocasCommunicationError("FOCAS client is not connected")
-

@@ -1,11 +1,7 @@
-Place the FANUC 64-bit FOCAS DLL here:
+Current default 32-bit DLL location:
 
-  D:\Project\Codex\DataCollector\vendor\fwlib64.dll
+  vendor\Fwlib32.dll
 
-Why this file is not already bundled:
+Additional dependent FOCAS DLLs can live in the same folder.
 
-1. The official third-party download page currently requires account sign-in.
-2. The FANUC / FOCAS DLL is vendor-supplied software and should be obtained through a legitimate source.
-
-After the DLL is placed here, you can launch the GUI or the PowerShell start script directly.
-
+For notebook testing, copy the whole vendor folder together with the project.
