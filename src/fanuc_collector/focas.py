@@ -4,6 +4,8 @@ import ctypes
 from ctypes import POINTER, byref, c_char, c_char_p, c_long, c_short, c_ushort
 import os
 from pathlib import Path
+import struct
+import sys
 
 from .models import MachineStatus, SystemInfo, utc_now
 
@@ -103,7 +105,10 @@ class FocasClient:
             self._lib = ctypes.WinDLL(str(self._dll_path))
         except OSError as exc:
             raise FocasLibraryLoadError(
-                f"Failed to load FOCAS DLL: {self._dll_path}. Check 32-bit vs 64-bit compatibility."
+                "Failed to load FOCAS DLL: "
+                f"{self._dll_path}. "
+                f"python={sys.executable}, bits={struct.calcsize('P') * 8}. "
+                f"Windows loader error: {exc}"
             ) from exc
 
         self._lib.cnc_allclibhndl3.argtypes = [c_char_p, c_ushort, c_long, POINTER(c_ushort)]

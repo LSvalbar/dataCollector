@@ -17,7 +17,7 @@ if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
 $resolvedConfig = [System.IO.Path]::GetFullPath($ConfigPath)
 
 if (-not (Test-Path $pythonExe)) {
-    $pythonExe = "python"
+    throw "Bundled 32-bit Python not found: $pythonExe. Copy the runtime folder together with the project."
 }
 
 if (-not (Test-Path $resolvedConfig)) {
