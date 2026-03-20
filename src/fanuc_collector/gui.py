@@ -20,27 +20,7 @@ STATUS_LABELS = {
     "emergency": "急停",
 }
 
-LATEST_KEY_LABELS = {
-    "machine_name": "机床名称",
-    "machine_ip": "机床 IP",
-    "machine_port": "端口",
-    "machine_online": "在线状态",
-    "automatic_mode": "自动模式",
-    "operation_mode": "运行模式",
-    "emergency_state": "急停状态",
-    "alarm_state": "报警状态",
-    "controller_mode_number": "控制器模式编号",
-    "controller_mode_text": "控制器模式",
-    "oee_status_number": "OEE 状态编号",
-    "oee_status_text": "OEE 状态",
-    "counter_day": "统计日期",
-    "today_power_on_ms": "当日开机累计时间(ms)",
-    "today_processing_ms": "当日加工累计时间(ms)",
-    "observed_power_on_at": "观测开机时间",
-    "observed_power_off_at": "观测关机时间",
-}
-
-LATEST_VALUE_MAPPERS = {
+VALUE_MAPPERS = {
     "machine_online": {"0": "关机", "1": "在线"},
     "emergency_state": {"0": "正常", "1": "急停"},
     "alarm_state": {"0": "正常", "1": "报警"},
@@ -63,6 +43,56 @@ LATEST_VALUE_MAPPERS = {
         "Offline": "关机",
     },
 }
+
+CURRENT_STATUS_LABELS = {
+    "machine_name": "机床名称",
+    "machine_ip": "机床 IP",
+    "machine_port": "连接端口",
+    "machine_online": "在线状态",
+    "automatic_mode": "自动模式",
+    "operation_mode": "运行模式",
+    "controller_mode_text": "控制器模式",
+    "oee_status_text": "当前机床状态",
+    "alarm_state": "报警状态",
+    "emergency_state": "急停状态",
+    "observed_power_on_at": "最近开机时间",
+    "observed_power_off_at": "最近关机时间",
+}
+
+DAILY_METRIC_LABELS = {
+    "counter_day": "统计日期",
+    "today_power_on_ms": "当日开机累计时长",
+    "today_processing_ms": "当日加工累计时长",
+    "today_idle_ms": "当日待机累计时长",
+    "today_alarm_ms": "当日报警累计时长",
+    "today_emergency_ms": "当日急停累计时长",
+    "today_utilization_percent": "当日利用率",
+}
+
+CURRENT_STATUS_ORDER = [
+    "machine_name",
+    "machine_ip",
+    "machine_port",
+    "machine_online",
+    "oee_status_text",
+    "controller_mode_text",
+    "automatic_mode",
+    "operation_mode",
+    "alarm_state",
+    "emergency_state",
+    "observed_power_on_at",
+    "observed_power_off_at",
+]
+
+DAILY_METRIC_ORDER = [
+    "counter_day",
+    "today_power_on_ms",
+    "today_processing_ms",
+    "today_idle_ms",
+    "today_alarm_ms",
+    "today_emergency_ms",
+    "today_utilization_percent",
+]
 
 
 class CollectorGui:
@@ -131,8 +161,14 @@ class CollectorGui:
             ttk.Label(frame, text=label_text).grid(row=row_index, column=0, sticky="w", pady=4)
             var = tk.StringVar()
             self.fields[field_key] = var
-            entry = ttk.Entry(frame, textvariable=var, width=84)
-            entry.grid(row=row_index, column=1, columnspan=4, sticky="ew", padx=(8, 8), pady=4)
+            ttk.Entry(frame, textvariable=var, width=84).grid(
+                row=row_index,
+                column=1,
+                columnspan=4,
+                sticky="ew",
+                padx=(8, 8),
+                pady=4,
+            )
             if field_key == "machine.focas_dll_path":
                 ttk.Button(frame, text="浏览", command=self.browse_dll).grid(row=row_index, column=5, sticky="ew")
 
@@ -145,14 +181,14 @@ class CollectorGui:
         ttk.Button(button_row, text="刷新最新值", command=self.refresh_latest_values).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(button_row, text="导出快照 CSV", command=self.export_csv).pack(side=tk.LEFT, padx=(0, 8))
 
-        latest_frame = ttk.LabelFrame(frame, text="最新采集值", padding=8)
+        latest_frame = ttk.LabelFrame(frame, text="当前状态与当日统计", padding=8)
         latest_frame.grid(row=11, column=0, columnspan=3, sticky="nsew", padx=(0, 8))
-        self.latest_text = tk.Text(latest_frame, height=22, width=62, wrap="none")
+        self.latest_text = tk.Text(latest_frame, height=24, width=66, wrap="none")
         self.latest_text.pack(fill=tk.BOTH, expand=True)
 
         log_frame = ttk.LabelFrame(frame, text="日志尾部", padding=8)
         log_frame.grid(row=11, column=3, columnspan=3, sticky="nsew")
-        self.log_text = tk.Text(log_frame, height=22, width=62, wrap="none")
+        self.log_text = tk.Text(log_frame, height=24, width=66, wrap="none")
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
         frame.columnconfigure(1, weight=1)
@@ -174,7 +210,7 @@ class CollectorGui:
 
         ttk.Label(
             frame,
-            text="说明：统计页按时间段展示机床每天在做什么，状态包含加工、待机、报警、急停、关机。",
+            text="说明：按时间段展示机床当天的状态轨迹，状态包括加工、待机、报警、急停、关机。",
         ).pack(anchor="w", pady=(0, 8))
 
         ttk.Label(frame, textvariable=self.report_summary_var, foreground="#555").pack(anchor="w", pady=(0, 8))
@@ -303,12 +339,46 @@ class CollectorGui:
             self._set_text(self.latest_text, "暂无最新采集值。")
             return
 
-        lines = []
-        for key, value_text, updated_at in rows:
-            display_key = LATEST_KEY_LABELS.get(key, key)
-            display_value = LATEST_VALUE_MAPPERS.get(key, {}).get(value_text, value_text)
-            lines.append(f"{display_key:20} {display_value:24} {self._format_timestamp_text(updated_at)}")
-        self._set_text(self.latest_text, "\n".join(lines))
+        latest_map = {key: (value_text, updated_at) for key, value_text, updated_at in rows}
+        display_text = self._build_latest_display(latest_map)
+        self._set_text(self.latest_text, display_text)
+
+    def _build_latest_display(self, latest_map: dict[str, tuple[str, str]]) -> str:
+        current_lines = ["当前状态"]
+        for key in CURRENT_STATUS_ORDER:
+            current_lines.append(self._format_display_line(key, latest_map))
+
+        daily_lines = ["当日统计"]
+        for key in DAILY_METRIC_ORDER:
+            daily_lines.append(self._format_display_line(key, latest_map))
+
+        updated_at_values = [updated_at for _, updated_at in latest_map.values() if updated_at]
+        footer = []
+        if updated_at_values:
+            footer.append(f"最后更新时间：{self._format_timestamp_text(max(updated_at_values))}")
+
+        return "\n".join(current_lines + [""] + daily_lines + ([""] + footer if footer else []))
+
+    def _format_display_line(self, key: str, latest_map: dict[str, tuple[str, str]]) -> str:
+        label = CURRENT_STATUS_LABELS.get(key) or DAILY_METRIC_LABELS.get(key) or key
+        raw_value = latest_map.get(key, ("--", ""))[0]
+        display_value = self._format_display_value(key, raw_value)
+        return f"{label:<16} {display_value}"
+
+    def _format_display_value(self, key: str, raw_value: str) -> str:
+        if raw_value == "--":
+            return raw_value
+
+        mapped_value = VALUE_MAPPERS.get(key, {}).get(raw_value, raw_value)
+
+        if key.endswith("_ms"):
+            return self._format_duration(int(float(mapped_value)))
+        if key == "today_utilization_percent":
+            return f"{float(mapped_value):.2f}%"
+        if key.endswith("_at"):
+            return self._format_timestamp_text(mapped_value)
+
+        return mapped_value
 
     def refresh_timeline_report(self, show_messages: bool = False) -> None:
         try:
@@ -338,18 +408,18 @@ class CollectorGui:
             self.report_summary_var.set("该日期暂无可用统计数据。")
             return
 
-        summary_minutes: dict[str, int] = {}
+        summary_duration: dict[str, int] = {}
         for segment in segments:
             status_name = STATUS_LABELS.get(segment.state_code, segment.state_code)
             duration_text = self._format_duration(segment.duration_ms)
             start_text = self._format_datetime(segment.start_at)
             end_text = self._format_datetime(segment.end_at)
             self.report_tree.insert("", tk.END, values=(status_name, duration_text, start_text, end_text))
-            summary_minutes[status_name] = summary_minutes.get(status_name, 0) + segment.duration_ms
+            summary_duration[status_name] = summary_duration.get(status_name, 0) + segment.duration_ms
 
         summary_parts = [
             f"{status_name}{self._format_duration(duration_ms)}"
-            for status_name, duration_ms in sorted(summary_minutes.items(), key=lambda item: item[0])
+            for status_name, duration_ms in sorted(summary_duration.items(), key=lambda item: item[0])
         ]
         self.report_summary_var.set(f"{self.report_date_var.get().strip()} 时间统计：{'，'.join(summary_parts)}")
 
@@ -386,11 +456,11 @@ class CollectorGui:
         self.refresh_latest_values()
         self._refresh_log_tail()
 
-        self.report_refresh_counter = (self.report_refresh_counter + 1) % 5
+        self.report_refresh_counter = (self.report_refresh_counter + 1) % 8
         if self.report_refresh_counter == 0:
             self.refresh_timeline_report(show_messages=False)
 
-        self.root.after(1000, self._refresh_loop)
+        self.root.after(300, self._refresh_loop)
 
     def _refresh_log_tail(self) -> None:
         log_path = self._resolve_log_path()
@@ -399,7 +469,7 @@ class CollectorGui:
             return
 
         lines = log_path.read_text(encoding="utf-8", errors="ignore").splitlines()
-        self._set_text(self.log_text, "\n".join(lines[-40:]))
+        self._set_text(self.log_text, "\n".join(lines[-60:]))
 
     def _resolve_db_path(self) -> Path:
         db_path = Path(self.fields["storage.db_path"].get().strip())
@@ -421,7 +491,7 @@ class CollectorGui:
             self.report_tree.delete(item_id)
 
     def _format_duration(self, duration_ms: int) -> str:
-        total_seconds = max(0, duration_ms // 1000)
+        total_seconds = max(0, int(duration_ms) // 1000)
         hours, remainder = divmod(total_seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
 

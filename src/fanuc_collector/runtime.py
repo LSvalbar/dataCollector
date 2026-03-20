@@ -206,10 +206,18 @@ class CollectorRuntime:
             return None
 
         run_modes = set(self._config.machine.running_operation_modes)
+        is_running = previous_status.operation_mode in run_modes
+        is_idle = (
+            previous_status.machine_online == 1
+            and not is_running
+            and previous_status.alarm_state == 0
+            and previous_status.emergency_state == 0
+        )
         return CounterDelta(
             collected_at=collected_at,
             power_on_ms=elapsed_ms if previous_status.machine_online else 0,
-            run_ms=elapsed_ms if previous_status.operation_mode in run_modes else 0,
+            run_ms=elapsed_ms if is_running else 0,
+            idle_ms=elapsed_ms if is_idle else 0,
             alarm_ms=elapsed_ms if previous_status.alarm_state else 0,
             emergency_ms=elapsed_ms if previous_status.emergency_state else 0,
             sample_count=1,

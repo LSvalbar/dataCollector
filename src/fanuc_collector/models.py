@@ -67,6 +67,7 @@ class CounterDelta:
     collected_at: datetime
     power_on_ms: int = 0
     run_ms: int = 0
+    idle_ms: int = 0
     alarm_ms: int = 0
     emergency_ms: int = 0
     sample_count: int = 0

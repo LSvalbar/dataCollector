@@ -5,6 +5,7 @@ import json
 import queue
 import sqlite3
 import threading
+import time as time_module
 from datetime import date, datetime, time, timedelta, timezone, tzinfo as tzinfo_type
 from pathlib import Path
 
@@ -19,6 +20,7 @@ class StorageWriter:
         self._db_path = Path(db_path)
         self._queue: queue.Queue[WriteEnvelope | object] = queue.Queue(maxsize=max_queue_size)
         self._batch_size = batch_size
+        self._flush_interval_ms = 1000
         self._thread = threading.Thread(target=self._run, name="sqlite-writer", daemon=True)
         self._started = False
 
@@ -45,6 +47,7 @@ class StorageWriter:
         self._init_schema(connection)
 
         pending: list[WriteEnvelope] = []
+        pending_started_at_ms: int | None = None
         while True:
             try:
                 item = self._queue.get(timeout=1.0)
@@ -55,18 +58,23 @@ class StorageWriter:
                 if pending:
                     self._flush(connection, pending)
                     pending.clear()
+                    pending_started_at_ms = None
                 break
 
             if item is None:
                 if pending:
                     self._flush(connection, pending)
                     pending.clear()
+                    pending_started_at_ms = None
                 continue
 
+            if pending_started_at_ms is None:
+                pending_started_at_ms = self._monotonic_ms()
             pending.append(item)
-            if len(pending) >= self._batch_size:
+            if self._should_flush_pending(pending, pending_started_at_ms):
                 self._flush(connection, pending)
                 pending.clear()
+                pending_started_at_ms = None
 
         connection.close()
 
@@ -118,6 +126,7 @@ class StorageWriter:
                 day TEXT PRIMARY KEY,
                 power_on_ms INTEGER NOT NULL DEFAULT 0,
                 run_ms INTEGER NOT NULL DEFAULT 0,
+                idle_ms INTEGER NOT NULL DEFAULT 0,
                 alarm_ms INTEGER NOT NULL DEFAULT 0,
                 emergency_ms INTEGER NOT NULL DEFAULT 0,
                 sample_count INTEGER NOT NULL DEFAULT 0,
@@ -131,7 +140,27 @@ class StorageWriter:
             );
             """
         )
+        self._ensure_column(connection, "daily_counters", "idle_ms", "INTEGER NOT NULL DEFAULT 0")
         connection.commit()
+
+    def _ensure_column(self, connection: sqlite3.Connection, table_name: str, column_name: str, column_sql: str) -> None:
+        columns = {
+            row[1]
+            for row in connection.execute(f"PRAGMA table_info({table_name})")
+        }
+        if column_name in columns:
+            return
+        connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
+
+    def _should_flush_pending(self, pending: list[WriteEnvelope], pending_started_at_ms: int) -> bool:
+        if len(pending) >= self._batch_size:
+            return True
+        if pending and pending[-1].transitions:
+            return True
+        return (self._monotonic_ms() - pending_started_at_ms) >= self._flush_interval_ms
+
+    def _monotonic_ms(self) -> int:
+        return time_module.monotonic_ns() // 1_000_000
 
     def _flush(self, connection: sqlite3.Connection, pending: list[WriteEnvelope]) -> None:
         latest_rows: dict[str, tuple[str, str]] = {}
@@ -250,14 +279,16 @@ class StorageWriter:
                             day,
                             power_on_ms,
                             run_ms,
+                            idle_ms,
                             alarm_ms,
                             emergency_ms,
                             sample_count,
                             updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(day) DO UPDATE SET
                             power_on_ms = daily_counters.power_on_ms + excluded.power_on_ms,
                             run_ms = daily_counters.run_ms + excluded.run_ms,
+                            idle_ms = daily_counters.idle_ms + excluded.idle_ms,
                             alarm_ms = daily_counters.alarm_ms + excluded.alarm_ms,
                             emergency_ms = daily_counters.emergency_ms + excluded.emergency_ms,
                             sample_count = daily_counters.sample_count + excluded.sample_count,
@@ -267,6 +298,7 @@ class StorageWriter:
                             day,
                             counter.power_on_ms,
                             counter.run_ms,
+                            counter.idle_ms,
                             counter.alarm_ms,
                             counter.emergency_ms,
                             counter.sample_count,
@@ -326,7 +358,7 @@ def _latest_values_from_transitions(transitions) -> dict[str, tuple[str, str]]:
 def _latest_counter_keys(connection: sqlite3.Connection, day: str) -> dict[str, tuple[str, str]]:
     row = connection.execute(
         """
-        SELECT power_on_ms, run_ms, updated_at
+        SELECT power_on_ms, run_ms, idle_ms, alarm_ms, emergency_ms, updated_at
         FROM daily_counters
         WHERE day = ?
         """,
@@ -335,11 +367,16 @@ def _latest_counter_keys(connection: sqlite3.Connection, day: str) -> dict[str, 
     if row is None:
         return {}
 
-    power_on_ms, run_ms, updated_at = row
+    power_on_ms, run_ms, idle_ms, alarm_ms, emergency_ms, updated_at = row
+    utilization = 0.0 if int(power_on_ms) <= 0 else (int(run_ms) / int(power_on_ms)) * 100.0
     return {
         "counter_day": (day, updated_at),
         "today_power_on_ms": (str(power_on_ms), updated_at),
         "today_processing_ms": (str(run_ms), updated_at),
+        "today_idle_ms": (str(idle_ms), updated_at),
+        "today_alarm_ms": (str(alarm_ms), updated_at),
+        "today_emergency_ms": (str(emergency_ms), updated_at),
+        "today_utilization_percent": (f"{utilization:.2f}", updated_at),
     }
 
 
