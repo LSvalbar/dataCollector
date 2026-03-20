@@ -103,7 +103,10 @@ class CollectorGui:
         self.runtime_thread: threading.Thread | None = None
         self.last_exit_code: int | None = None
         self.local_timezone = datetime.now().astimezone().tzinfo
-        self.report_refresh_counter = 0
+        self.latest_refresh_interval_ms = 1000
+        self.report_refresh_interval_ms = 5000
+        self.log_refresh_interval_ms = 1000
+        self._last_report_refresh_at: datetime | None = None
 
         self.root.title("FANUC 机床数采程序")
         self.root.geometry("1280x860")
@@ -116,7 +119,7 @@ class CollectorGui:
 
         self._build_ui()
         self._load_form_data()
-        self._refresh_loop()
+        self._schedule_auto_refresh()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def _build_ui(self) -> None:
@@ -315,6 +318,8 @@ class CollectorGui:
         self.runtime_thread = threading.Thread(target=self._run_runtime, name="collector-runtime", daemon=True)
         self.runtime_thread.start()
         self.status_var.set("采集程序启动中...")
+        self.refresh_latest_values()
+        self._refresh_log_tail()
 
     def _run_runtime(self) -> None:
         assert self.runtime is not None
@@ -447,20 +452,30 @@ class CollectorGui:
         export_snapshots_to_csv(str(db_path), output_path)
         self.status_var.set(f"快照已导出：{output_path}")
 
-    def _refresh_loop(self) -> None:
-        if self.runtime_thread and self.runtime_thread.is_alive():
-            self.status_var.set("采集运行中")
-        elif self.last_exit_code is not None:
-            self.status_var.set(f"采集已停止，退出码 {self.last_exit_code}")
+    def _schedule_auto_refresh(self) -> None:
+        self.root.after(self.latest_refresh_interval_ms, self._run_auto_refresh_cycle)
 
-        self.refresh_latest_values()
-        self._refresh_log_tail()
+    def _run_auto_refresh_cycle(self) -> None:
+        try:
+            if self.runtime_thread and self.runtime_thread.is_alive():
+                self.status_var.set("采集运行中")
+            elif self.last_exit_code is not None:
+                self.status_var.set(f"采集已停止，退出码 {self.last_exit_code}")
 
-        self.report_refresh_counter = (self.report_refresh_counter + 1) % 8
-        if self.report_refresh_counter == 0:
-            self.refresh_timeline_report(show_messages=False)
+            self.refresh_latest_values()
+            self._refresh_log_tail()
 
-        self.root.after(300, self._refresh_loop)
+            now = datetime.now()
+            if (
+                self._last_report_refresh_at is None
+                or int((now - self._last_report_refresh_at).total_seconds() * 1000) >= self.report_refresh_interval_ms
+            ):
+                self.refresh_timeline_report(show_messages=False)
+                self._last_report_refresh_at = now
+        except Exception as exc:
+            self.status_var.set(f"自动刷新异常：{exc}")
+        finally:
+            self._schedule_auto_refresh()
 
     def _refresh_log_tail(self) -> None:
         log_path = self._resolve_log_path()
