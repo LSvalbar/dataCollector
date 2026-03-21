@@ -754,6 +754,12 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             changed = true;
         }
 
+        if (!string.IsNullOrEmpty(formula.ResultUnit))
+        {
+            formula.ResultUnit = string.Empty;
+            changed = true;
+        }
+
         return changed;
     }
 
@@ -825,7 +831,7 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
 
         var match = Regex.Match(
             expression.Trim(),
-            @"^\(\((?<metric>.+?)\s*/\s*\((?<hours>\d+(?:\.\d+)?)\s*\*\s*60\)\)\s*\*\s*(?<coefficient>\d+(?:\.\d+)?)\s*\*\s*100\)$",
+            @"^\(\((?<metric>.+?)\s*/\s*\((?<hours>\d+(?:\.\d+)?)\s*\*\s*60\)\)\s*\*\s*(?<coefficient>\d+(?:\.\d+)?)\)$",
             RegexOptions.CultureInvariant);
 
         if (!match.Success)

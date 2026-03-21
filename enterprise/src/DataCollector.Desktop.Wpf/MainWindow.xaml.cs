@@ -593,12 +593,12 @@ public partial class MainWindow : Window
 
     private static string BuildFormulaExpression(FormulaSelection selection)
     {
-        return $"(({selection.PrimaryVariable} / ({selection.StandardWorkHours.ToString("0.####", CultureInfo.InvariantCulture)} * 60)) * {selection.Coefficient.ToString("0.####", CultureInfo.InvariantCulture)} * 100)";
+        return $"(({selection.PrimaryVariable} / ({selection.StandardWorkHours.ToString("0.####", CultureInfo.InvariantCulture)} * 60)) * {selection.Coefficient.ToString("0.####", CultureInfo.InvariantCulture)})";
     }
 
     private static string BuildFormulaPreview(FormulaSelection selection)
     {
-        return $"{selection.PrimaryVariable} / 制式工时({selection.StandardWorkHours:0.##}小时) × 系数({selection.Coefficient:0.##}) × 100";
+        return $"{selection.PrimaryVariable} / 制式工时({selection.StandardWorkHours:0.##}小时) × 系数({selection.Coefficient:0.##})";
     }
 
     private static HashSet<string> BuildVisibleOptionSet(params FormulaDefinitionDto?[] formulas)
@@ -1003,8 +1003,8 @@ public partial class MainWindow : Window
             WaitingMinutesText = row.WaitingMinutes.ToString("F2"),
             StandbyMinutesText = row.StandbyMinutes.ToString("F2"),
             PowerOffMinutesText = row.PowerOffMinutes.ToString("F2"),
-            PowerOnRateText = $"{row.PowerOnRate:F2}%",
-            UtilizationRateText = $"{row.UtilizationRate:F2}%",
+            PowerOnRateText = row.PowerOnRate.ToString("F2", CultureInfo.InvariantCulture),
+            UtilizationRateText = row.UtilizationRate.ToString("F2", CultureInfo.InvariantCulture),
             DataQualityText = TranslateDataQuality(row.DataQualityCode),
         };
     }

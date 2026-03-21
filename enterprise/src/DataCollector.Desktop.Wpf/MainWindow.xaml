@@ -268,7 +268,7 @@
                                 <TextBlock Grid.Row="3"
                                            Margin="0,40,0,0"
                                            Foreground="{StaticResource TextSecondaryBrush}"
-                                           Text="当前开机率按 时间项 / 制式工时(小时) × 系数 × 100 自动计算。" />
+                                           Text="当前开机率按 时间项 / 制式工时(小时) × 系数 自动计算。" />
                             </Grid>
                         </GroupBox>
 
@@ -324,7 +324,7 @@
                                 <TextBlock Grid.Row="3"
                                            Margin="0,40,0,0"
                                            Foreground="{StaticResource TextSecondaryBrush}"
-                                           Text="当前利用率按 时间项 / 制式工时(小时) × 系数 × 100 自动计算。" />
+                                           Text="当前利用率按 时间项 / 制式工时(小时) × 系数 自动计算。" />
                             </Grid>
                         </GroupBox>
                     </Grid>

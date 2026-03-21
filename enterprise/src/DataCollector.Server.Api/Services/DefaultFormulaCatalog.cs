@@ -17,8 +17,8 @@ internal static class DefaultFormulaCatalog
     public const string UtilizationRateCode = "utilization_rate";
     public const string PowerOnRateDisplayName = "开机率";
     public const string UtilizationRateDisplayName = "利用率";
-    public const string PowerOnRateDescription = "默认按选定时间项 / 制式工时(小时) * 系数 * 100 计算开机率。";
-    public const string UtilizationRateDescription = "默认按选定时间项 / 制式工时(小时) * 系数 * 100 计算利用率。";
+    public const string PowerOnRateDescription = "默认按选定时间项 / 制式工时(小时) * 系数 计算开机率。";
+    public const string UtilizationRateDescription = "默认按选定时间项 / 制式工时(小时) * 系数 计算利用率。";
     public const string DefaultPowerOnVariable = "开机时间";
     public const string DefaultUtilizationVariable = "加工时间";
     public const double DefaultStandardWorkHours = 10d;
@@ -47,7 +47,7 @@ internal static class DefaultFormulaCatalog
             StandardWorkHours = DefaultStandardWorkHours,
             Coefficient = DefaultCoefficient,
             VisibleOptionsCsv = string.Join(",", BaseVisibleOptions),
-            ResultUnit = "%",
+            ResultUnit = string.Empty,
             UpdatedAt = now,
             UpdatedBy = "system",
         };
@@ -65,7 +65,7 @@ internal static class DefaultFormulaCatalog
             StandardWorkHours = DefaultStandardWorkHours,
             Coefficient = DefaultCoefficient,
             VisibleOptionsCsv = string.Join(",", BaseVisibleOptions),
-            ResultUnit = "%",
+            ResultUnit = string.Empty,
             UpdatedAt = now,
             UpdatedBy = "system",
         };
@@ -73,6 +73,6 @@ internal static class DefaultFormulaCatalog
 
     public static string BuildExpression(string primaryVariable, double standardWorkHours, double coefficient)
     {
-        return $"(({primaryVariable} / ({standardWorkHours.ToString("0.####", CultureInfo.InvariantCulture)} * 60)) * {coefficient.ToString("0.####", CultureInfo.InvariantCulture)} * 100)";
+        return $"(({primaryVariable} / ({standardWorkHours.ToString("0.####", CultureInfo.InvariantCulture)} * 60)) * {coefficient.ToString("0.####", CultureInfo.InvariantCulture)})";
     }
 }

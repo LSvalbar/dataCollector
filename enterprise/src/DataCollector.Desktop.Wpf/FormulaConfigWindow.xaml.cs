@@ -77,7 +77,7 @@ public partial class FormulaConfigWindow : Window
             return "-";
         }
 
-        return $"{variableName} / 制式工时({standardHours:0.##}小时) × 系数({coefficient:0.##}) × 100";
+        return $"{variableName} / 制式工时({standardHours:0.##}小时) × 系数({coefficient:0.##})";
     }
 
     private void AddOptionButton_Click(object sender, RoutedEventArgs e)
