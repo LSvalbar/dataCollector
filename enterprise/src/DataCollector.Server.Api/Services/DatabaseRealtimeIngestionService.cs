@@ -119,8 +119,7 @@ public sealed class DatabaseRealtimeIngestionService : IRealtimeIngestionService
         var reportDateKey = ToDateKey(DateOnly.FromDateTime(snapshot.CollectedAt.LocalDateTime));
         var lastSegment = await dbContext.TimelineSegments
             .Where(segment => segment.DeviceId == deviceId && segment.ReportDateKey == reportDateKey)
-            .OrderByDescending(segment => segment.StartAt)
-            .ThenByDescending(segment => segment.TimelineSegmentId)
+            .OrderByDescending(segment => segment.TimelineSegmentId)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (lastSegment is null)
