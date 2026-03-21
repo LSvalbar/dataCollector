@@ -5,6 +5,7 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using DataCollector.Contracts;
 using DataCollector.Desktop.Wpf.Services;
+using System.Globalization;
 
 namespace DataCollector.Desktop.Wpf;
 
@@ -25,8 +26,15 @@ public partial class MainWindow : Window
     private string? _userGridContextCode;
     private string? _roleGridContextCode;
     private List<FormulaVariableOptionDto> _formulaOptions = [];
-    private FormulaSelection _powerOnFormulaSelection = new("开机时间", "已观测时间");
-    private FormulaSelection _utilizationFormulaSelection = new("加工时间", "开机时间");
+    private HashSet<string> _formulaVisibleOptions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "开机时间",
+        "加工时间",
+        "待机时间",
+        "关机时间",
+    };
+    private FormulaSelection _powerOnFormulaSelection = new("开机时间", 10d, 1d);
+    private FormulaSelection _utilizationFormulaSelection = new("加工时间", 10d, 1d);
 
     public MainWindow()
     {
@@ -163,8 +171,9 @@ public partial class MainWindow : Window
                 .ToList();
             var powerOnFormula = response.Formulas.FirstOrDefault(formula => formula.Code == "power_on_rate");
             var utilizationFormula = response.Formulas.FirstOrDefault(formula => formula.Code == "utilization_rate");
-            _powerOnFormulaSelection = ParseFormulaSelection(powerOnFormula?.Expression, "开机时间", "已观测时间");
-            _utilizationFormulaSelection = ParseFormulaSelection(utilizationFormula?.Expression, "加工时间", "开机时间");
+            _powerOnFormulaSelection = ParseFormulaSelection(powerOnFormula, "开机时间");
+            _utilizationFormulaSelection = ParseFormulaSelection(utilizationFormula, "加工时间");
+            _formulaVisibleOptions = BuildVisibleOptionSet(powerOnFormula, utilizationFormula);
             BindFormulaSelections();
             ReportSummaryTextBlock.Text = $"日报快照：{response.SnapshotAt:yyyy-MM-dd HH:mm:ss}";
             DailyReportGrid.ItemsSource = response.Rows.Select(ToReportGridRow).ToList();
@@ -200,8 +209,8 @@ public partial class MainWindow : Window
                 StateText = segment.State.ToDisplayName(),
                 StartAtText = segment.StartAt.ToString("yyyy-MM-dd HH:mm:ss"),
                 EndAtText = segment.EndAt.ToString("yyyy-MM-dd HH:mm:ss"),
-                DurationMinutesText = segment.DurationMinutes.ToString("F2"),
-                DataQualityCode = segment.DataQualityCode,
+                DurationSecondsText = segment.DurationSeconds.ToString(CultureInfo.InvariantCulture),
+                DataQualityText = TranslateDataQuality(segment.DataQualityCode),
                 StateBackground = GetStateBackground(segment.State),
                 StateForeground = GetStateForeground(segment.State),
             }).ToList();
@@ -533,51 +542,89 @@ public partial class MainWindow : Window
 
     private void BindFormulaSelections()
     {
-        PowerOnNumeratorComboBox.ItemsSource = _formulaOptions;
-        PowerOnDenominatorComboBox.ItemsSource = _formulaOptions;
-        UtilizationNumeratorComboBox.ItemsSource = _formulaOptions;
-        UtilizationDenominatorComboBox.ItemsSource = _formulaOptions;
+        var visibleOptions = GetVisibleFormulaOptions();
 
-        PowerOnNumeratorComboBox.SelectedValue = _powerOnFormulaSelection.Numerator;
-        PowerOnDenominatorComboBox.SelectedValue = _powerOnFormulaSelection.Denominator;
-        UtilizationNumeratorComboBox.SelectedValue = _utilizationFormulaSelection.Numerator;
-        UtilizationDenominatorComboBox.SelectedValue = _utilizationFormulaSelection.Denominator;
+        PowerOnMetricComboBox.ItemsSource = visibleOptions;
+        UtilizationMetricComboBox.ItemsSource = visibleOptions;
 
-        PowerOnFormulaPreviewTextBlock.Text = $"当前公式：{BuildFormulaExpression(_powerOnFormulaSelection)}";
-        UtilizationFormulaPreviewTextBlock.Text = $"当前公式：{BuildFormulaExpression(_utilizationFormulaSelection)}";
+        PowerOnMetricComboBox.SelectedValue = _powerOnFormulaSelection.PrimaryVariable;
+        UtilizationMetricComboBox.SelectedValue = _utilizationFormulaSelection.PrimaryVariable;
+
+        PowerOnStandardHoursTextBlock.Text = $"{_powerOnFormulaSelection.StandardWorkHours:0.##} 小时";
+        PowerOnCoefficientTextBlock.Text = _powerOnFormulaSelection.Coefficient.ToString("0.##", CultureInfo.InvariantCulture);
+        UtilizationStandardHoursTextBlock.Text = $"{_utilizationFormulaSelection.StandardWorkHours:0.##} 小时";
+        UtilizationCoefficientTextBlock.Text = _utilizationFormulaSelection.Coefficient.ToString("0.##", CultureInfo.InvariantCulture);
+
+        PowerOnFormulaPreviewTextBlock.Text = $"当前公式：{BuildFormulaPreview(_powerOnFormulaSelection)}";
+        UtilizationFormulaPreviewTextBlock.Text = $"当前公式：{BuildFormulaPreview(_utilizationFormulaSelection)}";
     }
 
-    private static FormulaSelection ParseFormulaSelection(string? expression, string defaultNumerator, string defaultDenominator)
+    private IReadOnlyList<FormulaVariableOptionDto> GetVisibleFormulaOptions()
     {
-        if (string.IsNullOrWhiteSpace(expression))
+        return _formulaOptions
+            .Where(option => _formulaVisibleOptions.Contains(option.VariableName))
+            .OrderBy(option =>
+            {
+                return option.VariableName switch
+                {
+                    "开机时间" => 0,
+                    "加工时间" => 1,
+                    "待机时间" => 2,
+                    "关机时间" => 3,
+                    _ => 10,
+                };
+            })
+            .ThenBy(option => option.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static FormulaSelection ParseFormulaSelection(FormulaDefinitionDto? formula, string defaultVariable)
+    {
+        if (formula is not null &&
+            !string.IsNullOrWhiteSpace(formula.PrimaryVariable) &&
+            formula.StandardWorkHours > 0 &&
+            formula.Coefficient > 0)
         {
-            return new FormulaSelection(defaultNumerator, defaultDenominator);
+            return new FormulaSelection(formula.PrimaryVariable, formula.StandardWorkHours, formula.Coefficient);
         }
 
-        var normalized = expression.Replace(" ", string.Empty, StringComparison.Ordinal);
-        if (!normalized.EndsWith("*100", StringComparison.Ordinal))
-        {
-            return new FormulaSelection(defaultNumerator, defaultDenominator);
-        }
-
-        var ratio = normalized[..^4];
-        if (ratio.StartsWith("(") && ratio.EndsWith(")"))
-        {
-            ratio = ratio[1..^1];
-        }
-
-        var parts = ratio.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length != 2)
-        {
-            return new FormulaSelection(defaultNumerator, defaultDenominator);
-        }
-
-        return new FormulaSelection(parts[0], parts[1]);
+        return new FormulaSelection(defaultVariable, 10d, 1d);
     }
 
     private static string BuildFormulaExpression(FormulaSelection selection)
     {
-        return $"({selection.Numerator} / {selection.Denominator}) * 100";
+        return $"(({selection.PrimaryVariable} / ({selection.StandardWorkHours.ToString("0.####", CultureInfo.InvariantCulture)} * 60)) * {selection.Coefficient.ToString("0.####", CultureInfo.InvariantCulture)} * 100)";
+    }
+
+    private static string BuildFormulaPreview(FormulaSelection selection)
+    {
+        return $"{selection.PrimaryVariable} / 制式工时({selection.StandardWorkHours:0.##}小时) × 系数({selection.Coefficient:0.##}) × 100";
+    }
+
+    private static HashSet<string> BuildVisibleOptionSet(params FormulaDefinitionDto?[] formulas)
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "开机时间",
+            "加工时间",
+            "待机时间",
+            "关机时间",
+        };
+
+        foreach (var formula in formulas.Where(item => item is not null))
+        {
+            foreach (var option in formula!.VisibleOptions)
+            {
+                result.Add(option);
+            }
+
+            if (!string.IsNullOrWhiteSpace(formula.PrimaryVariable))
+            {
+                result.Add(formula.PrimaryVariable);
+            }
+        }
+
+        return result;
     }
 
     private void UpdateServerStatus(bool online)
@@ -937,7 +984,7 @@ public partial class MainWindow : Window
             CurrentProgramNo = device.CurrentProgramNo ?? "-",
             SpindleSpeedText = device.SpindleSpeedRpm is null ? "-" : $"{device.SpindleSpeedRpm} rpm",
             SpindleLoadText = device.SpindleLoadPercent is null ? "-" : $"{device.SpindleLoadPercent:F1}%",
-            DataQualityCode = device.DataQualityCode ?? "-",
+            DataQualityText = TranslateDataQuality(device.DataQualityCode),
             LastCollectedAtText = device.LastCollectedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-",
             LastHeartbeatAtText = device.LastHeartbeatAt.ToString("yyyy-MM-dd HH:mm:ss"),
         };
@@ -958,7 +1005,7 @@ public partial class MainWindow : Window
             PowerOffMinutesText = row.PowerOffMinutes.ToString("F2"),
             PowerOnRateText = $"{row.PowerOnRate:F2}%",
             UtilizationRateText = $"{row.UtilizationRate:F2}%",
-            DataQualityCode = row.DataQualityCode,
+            DataQualityText = TranslateDataQuality(row.DataQualityCode),
         };
     }
 
@@ -997,6 +1044,22 @@ public partial class MainWindow : Window
             _ => CreateBrush("#EDEBE9"),
         };
 
+    private static string TranslateDataQuality(string? qualityCode) =>
+        qualityCode?.Trim().ToLowerInvariant() switch
+        {
+            "native_preferred" => "原生优先",
+            "focas_realtime" => "实时采集",
+            "focas_error" => "采集异常",
+            "stale_snapshot" => "快照滞后",
+            "manual_disabled" => "手动停用",
+            "not_collected" => "未采集",
+            "fallback" => "回退计算",
+            "estimated" => "估算值",
+            "gap" => "数据缺口",
+            null or "" => "-",
+            _ => qualityCode!,
+        };
+
     private static Brush CreateBrush(string hex)
     {
         return (Brush)new BrushConverter().ConvertFromString(hex)!;
@@ -1018,7 +1081,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new FormulaConfigWindow(_formulaOptions, _powerOnFormulaSelection, _utilizationFormulaSelection) { Owner = this };
+        var window = new FormulaConfigWindow(
+            _formulaOptions,
+            _formulaVisibleOptions,
+            _powerOnFormulaSelection,
+            _utilizationFormulaSelection)
+        {
+            Owner = this,
+        };
         if (window.ShowDialog() != true || window.PowerOnSelection is null || window.UtilizationSelection is null)
         {
             return;
@@ -1031,6 +1101,10 @@ public partial class MainWindow : Window
                 new FormulaUpdateRequest
                 {
                     Expression = BuildFormulaExpression(window.PowerOnSelection),
+                    PrimaryVariable = window.PowerOnSelection.PrimaryVariable,
+                    StandardWorkHours = window.PowerOnSelection.StandardWorkHours,
+                    Coefficient = window.PowerOnSelection.Coefficient,
+                    VisibleOptions = window.VisibleOptions.ToArray(),
                     UpdatedBy = Environment.UserName,
                 });
             await _apiClient.UpdateFormulaAsync(
@@ -1038,11 +1112,16 @@ public partial class MainWindow : Window
                 new FormulaUpdateRequest
                 {
                     Expression = BuildFormulaExpression(window.UtilizationSelection),
+                    PrimaryVariable = window.UtilizationSelection.PrimaryVariable,
+                    StandardWorkHours = window.UtilizationSelection.StandardWorkHours,
+                    Coefficient = window.UtilizationSelection.Coefficient,
+                    VisibleOptions = window.VisibleOptions.ToArray(),
                     UpdatedBy = Environment.UserName,
                 });
 
             _powerOnFormulaSelection = window.PowerOnSelection;
             _utilizationFormulaSelection = window.UtilizationSelection;
+            _formulaVisibleOptions = new HashSet<string>(window.VisibleOptions, StringComparer.OrdinalIgnoreCase);
             await RefreshReportAsync(true);
             MessageBox.Show(this, "公式配置已更新。", "保存成功", MessageBoxButton.OK, MessageBoxImage.Information);
         }
@@ -1369,7 +1448,7 @@ public partial class MainWindow : Window
         public required string CurrentProgramNo { get; init; }
         public required string SpindleSpeedText { get; init; }
         public required string SpindleLoadText { get; init; }
-        public required string DataQualityCode { get; init; }
+        public required string DataQualityText { get; init; }
         public required string LastCollectedAtText { get; init; }
         public required string LastHeartbeatAtText { get; init; }
     }
@@ -1387,7 +1466,7 @@ public partial class MainWindow : Window
         public required string PowerOffMinutesText { get; init; }
         public required string PowerOnRateText { get; init; }
         public required string UtilizationRateText { get; init; }
-        public required string DataQualityCode { get; init; }
+        public required string DataQualityText { get; init; }
     }
 
     private sealed class TimelineGridRow
@@ -1395,8 +1474,8 @@ public partial class MainWindow : Window
         public required string StateText { get; init; }
         public required string StartAtText { get; init; }
         public required string EndAtText { get; init; }
-        public required string DurationMinutesText { get; init; }
-        public required string DataQualityCode { get; init; }
+        public required string DurationSecondsText { get; init; }
+        public required string DataQualityText { get; init; }
         public required Brush StateBackground { get; init; }
         public required Brush StateForeground { get; init; }
     }

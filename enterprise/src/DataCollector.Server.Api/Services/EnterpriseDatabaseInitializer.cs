@@ -72,7 +72,12 @@ public sealed class EnterpriseDatabaseInitializer
                 "OeeStatusText", "NativePowerOnTotalMs", "NativeOperatingTotalMs", "NativeCuttingTotalMs",
                 "NativeFreeTotalMs", "DataQualityCode", "LastCollectionError"
             ],
-            ["formulas"] = ["Code", "DisplayName", "Description", "Expression", "ResultUnit", "UpdatedBy", "UpdatedAt"],
+            ["formulas"] =
+            [
+                "Code", "DisplayName", "Description", "Expression", "PrimaryVariable",
+                "StandardWorkHours", "Coefficient", "VisibleOptionsCsv", "ResultUnit",
+                "UpdatedBy", "UpdatedAt",
+            ],
             ["users"] = ["UserCode", "UserName", "DisplayName", "Department", "IsEnabled", "LastLoginAt"],
             ["roles"] = ["RoleCode", "RoleName", "Description"],
             ["user_roles"] = ["UserCode", "RoleCode"],

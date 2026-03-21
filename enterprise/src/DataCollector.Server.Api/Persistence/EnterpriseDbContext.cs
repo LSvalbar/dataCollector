@@ -59,6 +59,8 @@ public sealed class EnterpriseDbContext : DbContext
             entity.Property(item => item.DisplayName).HasMaxLength(64);
             entity.Property(item => item.Description).HasMaxLength(256);
             entity.Property(item => item.Expression).HasMaxLength(512);
+            entity.Property(item => item.PrimaryVariable).HasMaxLength(64);
+            entity.Property(item => item.VisibleOptionsCsv).HasMaxLength(512);
             entity.Property(item => item.ResultUnit).HasMaxLength(16);
             entity.Property(item => item.UpdatedBy).HasMaxLength(64);
         });
@@ -210,6 +212,14 @@ public sealed class FormulaEntity
     public string Description { get; set; } = string.Empty;
 
     public string Expression { get; set; } = string.Empty;
+
+    public string PrimaryVariable { get; set; } = string.Empty;
+
+    public double StandardWorkHours { get; set; }
+
+    public double Coefficient { get; set; }
+
+    public string VisibleOptionsCsv { get; set; } = string.Empty;
 
     public string ResultUnit { get; set; } = string.Empty;
 

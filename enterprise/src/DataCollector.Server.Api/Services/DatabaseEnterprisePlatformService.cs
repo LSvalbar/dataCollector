@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Text.RegularExpressions;
 using DataCollector.Contracts;
 using DataCollector.Core;
 using DataCollector.Core.Formula;
@@ -266,28 +267,19 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         return (await EnsureRequiredFormulasAsync(dbContext, cancellationToken))
             .OrderBy(formula => formula.Code)
-            .Select(formula => new FormulaDefinitionDto
-            {
-                Code = formula.Code,
-                DisplayName = formula.DisplayName,
-                Description = formula.Description,
-                Expression = formula.Expression,
-                ResultUnit = formula.ResultUnit,
-                UpdatedAt = formula.UpdatedAt,
-                UpdatedBy = formula.UpdatedBy,
-            })
+            .Select(ToFormulaDto)
             .ToArray();
     }
 
     private async Task<List<FormulaEntity>> EnsureRequiredFormulasAsync(EnterpriseDbContext dbContext, CancellationToken cancellationToken)
     {
         var formulas = await dbContext.Formulas
-            .AsNoTracking()
             .OrderBy(formula => formula.Code)
             .ToListAsync(cancellationToken);
 
         var now = _timeProvider.GetLocalNow();
         var missingDefaults = new List<FormulaEntity>();
+        var hasUpdates = false;
 
         if (!formulas.Any(item => item.Code == DefaultFormulaCatalog.PowerOnRateCode))
         {
@@ -302,11 +294,27 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
         if (missingDefaults.Count > 0)
         {
             await dbContext.Formulas.AddRangeAsync(missingDefaults, cancellationToken);
+            formulas.AddRange(missingDefaults);
+            hasUpdates = true;
+        }
+
+        foreach (var formula in formulas)
+        {
+            if (TryNormalizeFormula(formula))
+            {
+                formula.UpdatedAt = now;
+                if (string.IsNullOrWhiteSpace(formula.UpdatedBy))
+                {
+                    formula.UpdatedBy = "system";
+                }
+
+                hasUpdates = true;
+            }
+        }
+
+        if (hasUpdates)
+        {
             await dbContext.SaveChangesAsync(cancellationToken);
-            formulas = await dbContext.Formulas
-                .AsNoTracking()
-                .OrderBy(formula => formula.Code)
-                .ToListAsync(cancellationToken);
         }
 
         return formulas;
@@ -345,7 +353,37 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             throw new InvalidOperationException("公式输入有误，请查看列名是否相同。");
         }
 
+        var primaryVariable = request.PrimaryVariable?.Trim();
+        if (string.IsNullOrWhiteSpace(primaryVariable))
+        {
+            primaryVariable = TryParseFormulaSelection(expression)?.PrimaryVariable ?? formula.PrimaryVariable;
+        }
+
+        if (string.IsNullOrWhiteSpace(primaryVariable) ||
+            !_formulaEngine.GetSupportedVariableNames().Contains(primaryVariable, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("公式主时间项无效，请从下拉选项中选择。");
+        }
+
+        var standardWorkHours = request.StandardWorkHours ?? formula.StandardWorkHours;
+        if (standardWorkHours <= 0)
+        {
+            throw new InvalidOperationException("制式工时必须大于 0 小时。");
+        }
+
+        var coefficient = request.Coefficient ?? formula.Coefficient;
+        if (coefficient <= 0)
+        {
+            throw new InvalidOperationException("系数必须大于 0。");
+        }
+
+        var visibleOptions = NormalizeVisibleOptions(request.VisibleOptions, primaryVariable);
+
         formula.Expression = expression;
+        formula.PrimaryVariable = primaryVariable;
+        formula.StandardWorkHours = standardWorkHours;
+        formula.Coefficient = coefficient;
+        formula.VisibleOptionsCsv = string.Join(",", visibleOptions);
         formula.UpdatedBy = request.UpdatedBy.Trim();
         formula.UpdatedAt = _timeProvider.GetLocalNow();
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -675,6 +713,132 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
         };
     }
 
+    private bool TryNormalizeFormula(FormulaEntity formula)
+    {
+        var changed = false;
+        var parsed = TryParseFormulaSelection(formula.Expression);
+
+        if (string.IsNullOrWhiteSpace(formula.PrimaryVariable))
+        {
+            formula.PrimaryVariable = parsed?.PrimaryVariable
+                ?? (formula.Code == DefaultFormulaCatalog.UtilizationRateCode
+                    ? DefaultFormulaCatalog.DefaultUtilizationVariable
+                    : DefaultFormulaCatalog.DefaultPowerOnVariable);
+            changed = true;
+        }
+
+        if (formula.StandardWorkHours <= 0)
+        {
+            formula.StandardWorkHours = parsed?.StandardWorkHours ?? DefaultFormulaCatalog.DefaultStandardWorkHours;
+            changed = true;
+        }
+
+        if (formula.Coefficient <= 0)
+        {
+            formula.Coefficient = parsed?.Coefficient ?? DefaultFormulaCatalog.DefaultCoefficient;
+            changed = true;
+        }
+
+        var normalizedVisibleOptions = ParseVisibleOptions(formula.VisibleOptionsCsv, formula.PrimaryVariable);
+        var normalizedCsv = string.Join(",", normalizedVisibleOptions);
+        if (!string.Equals(formula.VisibleOptionsCsv, normalizedCsv, StringComparison.Ordinal))
+        {
+            formula.VisibleOptionsCsv = normalizedCsv;
+            changed = true;
+        }
+
+        var normalizedExpression = DefaultFormulaCatalog.BuildExpression(formula.PrimaryVariable, formula.StandardWorkHours, formula.Coefficient);
+        if (!string.Equals(formula.Expression, normalizedExpression, StringComparison.Ordinal))
+        {
+            formula.Expression = normalizedExpression;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    private IReadOnlyList<string> NormalizeVisibleOptions(IReadOnlyList<string>? requestedOptions, string primaryVariable)
+    {
+        var supported = _formulaEngine.GetSupportedVariableNames();
+        var options = requestedOptions?
+            .Where(option => !string.IsNullOrWhiteSpace(option))
+            .Select(option => option.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(option => supported.Contains(option, StringComparer.OrdinalIgnoreCase))
+            .ToList()
+            ?? [];
+
+        foreach (var baseOption in DefaultFormulaCatalog.BaseVisibleOptions)
+        {
+            if (!options.Contains(baseOption, StringComparer.OrdinalIgnoreCase))
+            {
+                options.Add(baseOption);
+            }
+        }
+
+        if (!options.Contains(primaryVariable, StringComparer.OrdinalIgnoreCase))
+        {
+            options.Add(primaryVariable);
+        }
+
+        return options
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(option =>
+            {
+                var index = Array.IndexOf(DefaultFormulaCatalog.BaseVisibleOptions, option);
+                return index >= 0 ? index : int.MaxValue;
+            })
+            .ThenBy(option => option, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<string> ParseVisibleOptions(string? csv, string primaryVariable)
+    {
+        var options = (csv ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var baseOption in DefaultFormulaCatalog.BaseVisibleOptions)
+        {
+            if (!options.Contains(baseOption, StringComparer.OrdinalIgnoreCase))
+            {
+                options.Add(baseOption);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(primaryVariable) &&
+            !options.Contains(primaryVariable, StringComparer.OrdinalIgnoreCase))
+        {
+            options.Add(primaryVariable);
+        }
+
+        return options.ToArray();
+    }
+
+    private static FormulaSelectionSnapshot? TryParseFormulaSelection(string? expression)
+    {
+        if (string.IsNullOrWhiteSpace(expression))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(
+            expression.Trim(),
+            @"^\(\((?<metric>.+?)\s*/\s*\((?<hours>\d+(?:\.\d+)?)\s*\*\s*60\)\)\s*\*\s*(?<coefficient>\d+(?:\.\d+)?)\s*\*\s*100\)$",
+            RegexOptions.CultureInvariant);
+
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        return new FormulaSelectionSnapshot(
+            match.Groups["metric"].Value.Trim(),
+            double.Parse(match.Groups["hours"].Value, System.Globalization.CultureInfo.InvariantCulture),
+            double.Parse(match.Groups["coefficient"].Value, System.Globalization.CultureInfo.InvariantCulture));
+    }
+
     private static FormulaDefinitionDto ToFormulaDto(FormulaEntity source)
     {
         return new FormulaDefinitionDto
@@ -683,11 +847,17 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             DisplayName = source.DisplayName,
             Description = source.Description,
             Expression = source.Expression,
+            PrimaryVariable = source.PrimaryVariable,
+            StandardWorkHours = source.StandardWorkHours,
+            Coefficient = source.Coefficient,
+            VisibleOptions = ParseVisibleOptions(source.VisibleOptionsCsv, source.PrimaryVariable),
             ResultUnit = source.ResultUnit,
             UpdatedAt = source.UpdatedAt,
             UpdatedBy = source.UpdatedBy,
         };
     }
+
+    private sealed record FormulaSelectionSnapshot(string PrimaryVariable, double StandardWorkHours, double Coefficient);
 
     private static UserDto ToUserDto(UserEntity source)
     {
@@ -733,6 +903,7 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
                 StartAt = segment.StartAt,
                 EndAt = segment.EndAt,
                 DurationMinutes = segment.DurationMinutes,
+                DurationSeconds = (int)Math.Max(0, Math.Round(segment.DurationMinutes * 60d, MidpointRounding.AwayFromZero)),
                 DataQualityCode = segment.DataQualityCode,
             })
             .ToList();
@@ -744,6 +915,7 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             {
                 last.EndAt = now;
                 last.DurationMinutes = Math.Round((last.EndAt - last.StartAt).TotalMinutes, 2, MidpointRounding.AwayFromZero);
+                last.DurationSeconds = (int)Math.Max(0, Math.Round(last.DurationMinutes * 60d, MidpointRounding.AwayFromZero));
             }
         }
 
@@ -772,6 +944,7 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
                 StartAt = startAt,
                 EndAt = endAt,
                 DurationMinutes = Math.Round((endAt - startAt).TotalMinutes, 2, MidpointRounding.AwayFromZero),
+                DurationSeconds = (int)Math.Max(0, Math.Round((endAt - startAt).TotalSeconds, MidpointRounding.AwayFromZero)),
                 DataQualityCode = quality,
             },
         ];

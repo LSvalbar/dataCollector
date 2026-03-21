@@ -1,0 +1,32 @@
+<Window x:Class="DataCollector.Desktop.Wpf.FormulaOptionPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="添加公式选项"
+        Width="420"
+        Height="180"
+        MinWidth="400"
+        MinHeight="170"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResizeWithGrip">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Foreground="{StaticResource TextSecondaryBrush}"
+                   Text="从全部时间项中选择一个加入下拉选项。" />
+
+        <ComboBox x:Name="OptionComboBox"
+                  Grid.Row="1"
+                  Margin="0,16,0,0"
+                  DisplayMemberPath="DisplayName"
+                  SelectedValuePath="VariableName" />
+
+        <StackPanel Grid.Row="2" Margin="0,18,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Width="90" Margin="0,0,8,0" Style="{StaticResource SecondaryButtonStyle}" Content="取消" Click="CancelButton_Click" />
+            <Button Width="90" Style="{StaticResource PrimaryButtonStyle}" Content="确定" Click="OkButton_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

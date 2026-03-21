@@ -54,7 +54,7 @@ public sealed class Worker : BackgroundService
             try
             {
                 var result = await _ingestionClient.PushAsync(snapshots, stoppingToken);
-                _logger.LogInformation(
+                _logger.LogDebug(
                     "Pushed realtime snapshots to {UploadEndpoint}, accepted {Accepted}/{Count}, processed at {ProcessedAt}",
                     _options.GetUploadEndpoint(),
                     result.AcceptedSnapshots,
@@ -138,7 +138,7 @@ public sealed class Worker : BackgroundService
         try
         {
             var configuration = await _configurationClient!.GetRuntimeConfigurationAsync(cancellationToken);
-            _logger.LogInformation(
+            _logger.LogDebug(
                 "Loaded runtime configuration for {AgentNodeName}, machine count {MachineCount}, generated at {GeneratedAt}",
                 configuration.AgentNodeName,
                 configuration.Machines.Count,

@@ -174,7 +174,7 @@
                                     <DataGridTextColumn Header="程序号" Binding="{Binding CurrentProgramNo}" Width="110" />
                                     <DataGridTextColumn Header="主轴转速" Binding="{Binding SpindleSpeedText}" Width="92" />
                                     <DataGridTextColumn Header="主轴负载" Binding="{Binding SpindleLoadText}" Width="96" />
-                                    <DataGridTextColumn Header="质量" Binding="{Binding DataQualityCode}" Width="110" />
+                                    <DataGridTextColumn Header="采集质量" Binding="{Binding DataQualityText}" Width="110" />
                                     <DataGridTextColumn Header="最近采集" Binding="{Binding LastCollectedAtText}" Width="160" />
                                     <DataGridTextColumn Header="最近心跳" Binding="{Binding LastHeartbeatAtText}" Width="160" />
                                 </DataGrid.Columns>
@@ -229,8 +229,8 @@
                                         <ColumnDefinition Width="52" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="分子" />
-                                    <ComboBox x:Name="PowerOnNumeratorComboBox"
+                                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="时间项" />
+                                    <ComboBox x:Name="PowerOnMetricComboBox"
                                               Grid.Column="1"
                                               DisplayMemberPath="DisplayName"
                                               SelectedValuePath="VariableName"
@@ -241,22 +241,34 @@
                                         <ColumnDefinition Width="52" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="分母" />
-                                    <ComboBox x:Name="PowerOnDenominatorComboBox"
-                                              Grid.Column="1"
-                                              DisplayMemberPath="DisplayName"
-                                              SelectedValuePath="VariableName"
-                                              IsEnabled="False" />
+                                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="制式工时" />
+                                    <TextBlock x:Name="PowerOnStandardHoursTextBlock"
+                                               Grid.Column="1"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               Text="10 小时" />
+                                </Grid>
+                                <Grid Grid.Row="2" Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="70" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="系数" />
+                                    <TextBlock x:Name="PowerOnCoefficientTextBlock"
+                                               Grid.Column="1"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               Text="1" />
                                 </Grid>
                                 <TextBlock x:Name="PowerOnFormulaPreviewTextBlock"
-                                           Grid.Row="2"
+                                           Grid.Row="3"
                                            Margin="0,12,0,0"
                                            Foreground="{StaticResource TextPrimaryBrush}"
                                            Text="当前公式：-" />
-                                <TextBlock Grid.Row="2"
+                                <TextBlock Grid.Row="3"
                                            Margin="0,40,0,0"
                                            Foreground="{StaticResource TextSecondaryBrush}"
-                                           Text="当前开机率按分子 / 分母 * 100 自动计算。" />
+                                           Text="当前开机率按 时间项 / 制式工时(小时) × 系数 × 100 自动计算。" />
                             </Grid>
                         </GroupBox>
 
@@ -273,8 +285,8 @@
                                         <ColumnDefinition Width="52" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="分子" />
-                                    <ComboBox x:Name="UtilizationNumeratorComboBox"
+                                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="时间项" />
+                                    <ComboBox x:Name="UtilizationMetricComboBox"
                                               Grid.Column="1"
                                               DisplayMemberPath="DisplayName"
                                               SelectedValuePath="VariableName"
@@ -285,22 +297,34 @@
                                         <ColumnDefinition Width="52" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="分母" />
-                                    <ComboBox x:Name="UtilizationDenominatorComboBox"
-                                              Grid.Column="1"
-                                              DisplayMemberPath="DisplayName"
-                                              SelectedValuePath="VariableName"
-                                              IsEnabled="False" />
+                                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="制式工时" />
+                                    <TextBlock x:Name="UtilizationStandardHoursTextBlock"
+                                               Grid.Column="1"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               Text="10 小时" />
+                                </Grid>
+                                <Grid Grid.Row="2" Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="70" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="系数" />
+                                    <TextBlock x:Name="UtilizationCoefficientTextBlock"
+                                               Grid.Column="1"
+                                               VerticalAlignment="Center"
+                                               Foreground="{StaticResource TextPrimaryBrush}"
+                                               Text="1" />
                                 </Grid>
                                 <TextBlock x:Name="UtilizationFormulaPreviewTextBlock"
-                                           Grid.Row="2"
+                                           Grid.Row="3"
                                            Margin="0,12,0,0"
                                            Foreground="{StaticResource TextPrimaryBrush}"
                                            Text="当前公式：-" />
-                                <TextBlock Grid.Row="2"
+                                <TextBlock Grid.Row="3"
                                            Margin="0,40,0,0"
                                            Foreground="{StaticResource TextSecondaryBrush}"
-                                           Text="当前利用率按分子 / 分母 * 100 自动计算。" />
+                                           Text="当前利用率按 时间项 / 制式工时(小时) × 系数 × 100 自动计算。" />
                             </Grid>
                         </GroupBox>
                     </Grid>
@@ -326,7 +350,7 @@
                                 <DataGridTextColumn Header="关机时间(分钟)" Binding="{Binding PowerOffMinutesText}" Width="115" />
                                 <DataGridTextColumn Header="开机率" Binding="{Binding PowerOnRateText}" Width="90" />
                                 <DataGridTextColumn Header="利用率" Binding="{Binding UtilizationRateText}" Width="90" />
-                                <DataGridTextColumn Header="质量标记" Binding="{Binding DataQualityCode}" Width="110" />
+                                <DataGridTextColumn Header="采集质量" Binding="{Binding DataQualityText}" Width="110" />
                             </DataGrid.Columns>
                         </DataGrid>
                     </Border>
@@ -371,8 +395,8 @@
                                 </DataGridTemplateColumn>
                                 <DataGridTextColumn Header="开始时间" Binding="{Binding StartAtText}" Width="180" />
                                 <DataGridTextColumn Header="截止时间" Binding="{Binding EndAtText}" Width="180" />
-                                <DataGridTextColumn Header="时长(分钟)" Binding="{Binding DurationMinutesText}" Width="110" />
-                                <DataGridTextColumn Header="质量标记" Binding="{Binding DataQualityCode}" Width="140" />
+                                <DataGridTextColumn Header="时长(秒)" Binding="{Binding DurationSecondsText}" Width="110" />
+                                <DataGridTextColumn Header="采集质量" Binding="{Binding DataQualityText}" Width="140" />
                             </DataGrid.Columns>
                         </DataGrid>
                     </Border>

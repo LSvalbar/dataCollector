@@ -10,6 +10,14 @@ public sealed class FormulaDefinitionDto
 
     public required string Expression { get; set; }
 
+    public required string PrimaryVariable { get; set; }
+
+    public double StandardWorkHours { get; set; }
+
+    public double Coefficient { get; set; }
+
+    public required IReadOnlyList<string> VisibleOptions { get; set; }
+
     public required string ResultUnit { get; set; }
 
     public required string UpdatedBy { get; set; }
@@ -20,6 +28,14 @@ public sealed class FormulaDefinitionDto
 public sealed class FormulaUpdateRequest
 {
     public required string Expression { get; set; }
+
+    public string? PrimaryVariable { get; set; }
+
+    public double? StandardWorkHours { get; set; }
+
+    public double? Coefficient { get; set; }
+
+    public IReadOnlyList<string>? VisibleOptions { get; set; }
 
     public required string UpdatedBy { get; set; }
 }
@@ -88,6 +104,8 @@ public sealed class TimelineSegmentDto
     public DateTimeOffset EndAt { get; set; }
 
     public double DurationMinutes { get; set; }
+
+    public int DurationSeconds { get; set; }
 
     public string DataQualityCode { get; set; } = "native_preferred";
 }
