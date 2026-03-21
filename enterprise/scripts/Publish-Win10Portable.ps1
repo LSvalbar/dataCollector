@@ -9,6 +9,13 @@ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $enterpriseRoot = Split-Path -Parent $scriptRoot
 $outputRoot = Join-Path $enterpriseRoot "dist\$Runtime"
 
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+    Write-Host "dotnet SDK was not found on this machine." -ForegroundColor Yellow
+    Write-Host "Publish-Win10Portable.ps1 must run on a build machine, not on a runtime-only Win10 machine." -ForegroundColor Yellow
+    Write-Host "Run this script on the development machine, then copy dist\$Runtime to the Win10 test machine." -ForegroundColor Yellow
+    exit 1
+}
+
 Write-Host "Publishing enterprise package to $outputRoot" -ForegroundColor Cyan
 
 if (Test-Path $outputRoot) {
@@ -78,33 +85,33 @@ start "DataCollector Client" "%~dp0client\DataCollector.Desktop.Wpf.exe"
 "@
 
 $runbook = @"
-DataCollector Enterprise Win10 测试运行说明
-=========================================
+DataCollector Enterprise Win10 Runtime Notes
+===========================================
 
-1. 将整个 dist\$Runtime 目录复制到 Win10 测试机，例如：
+1. Copy the entire dist\$Runtime folder to the Win10 test machine.
+   Example:
    D:\source\dataCollector\enterprise\dist\$Runtime
 
-2. 如果只是查看正式版界面效果，直接双击：
+2. To view the enterprise UI, double-click:
    Start-Enterprise-All.bat
 
-3. 如果只想单独启动某个组件：
+3. To run components separately:
    Start-EnterpriseServer.bat
    Start-EnterpriseClient.bat
    Start-EnterpriseAgent.bat
 
-4. 当前正式版 enterprise 使用的是演示种子数据，用于评审架构、界面、公式和部署方式。
-   真实 FANUC 机床采集仍要在下一阶段把 C# Agent 接入 FOCAS 驱动和正式数据库。
+4. Publish-Win10Portable.ps1 is a packaging script, not a runtime script.
+   If the Win10 machine does not have dotnet, do not run this script there.
+   Run it on the development machine and copy dist\$Runtime afterward.
 
-5. 当前目录下三个子目录职责：
-   server  - 中央服务端 API
-   client  - 正式客户端
-   agent   - 车间 Agent 骨架
+5. The current enterprise build uses seeded demo data for architecture and UI review.
+   Real FANUC machine collection still requires the next step: C# Agent + FOCAS + production database.
 "@
 
 Set-Content -Path (Join-Path $outputRoot "Start-EnterpriseServer.bat") -Value $serverBat -Encoding Ascii
 Set-Content -Path (Join-Path $outputRoot "Start-EnterpriseClient.bat") -Value $clientBat -Encoding Ascii
 Set-Content -Path (Join-Path $outputRoot "Start-EnterpriseAgent.bat") -Value $agentBat -Encoding Ascii
 Set-Content -Path (Join-Path $outputRoot "Start-Enterprise-All.bat") -Value $allBat -Encoding Ascii
-Set-Content -Path (Join-Path $outputRoot "README-Win10-运行说明.txt") -Value $runbook -Encoding UTF8
+Set-Content -Path (Join-Path $outputRoot "README-Win10.txt") -Value $runbook -Encoding Ascii
 
 Write-Host "Portable package ready: $outputRoot" -ForegroundColor Green
