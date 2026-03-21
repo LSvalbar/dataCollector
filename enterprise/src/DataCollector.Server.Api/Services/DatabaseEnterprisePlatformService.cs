@@ -353,7 +353,10 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             throw new InvalidOperationException("公式输入有误，请查看列名是否相同。");
         }
 
-        var primaryVariable = request.PrimaryVariable?.Trim();
+        var primaryVariable = normalizedCode == DefaultFormulaCatalog.PowerOnRateCode
+            ? DefaultFormulaCatalog.DefaultPowerOnVariable
+            : request.PrimaryVariable?.Trim();
+
         if (string.IsNullOrWhiteSpace(primaryVariable))
         {
             primaryVariable = TryParseFormulaSelection(expression)?.PrimaryVariable ?? formula.PrimaryVariable;
@@ -718,7 +721,13 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
         var changed = false;
         var parsed = TryParseFormulaSelection(formula.Expression);
 
-        if (string.IsNullOrWhiteSpace(formula.PrimaryVariable))
+        if (formula.Code == DefaultFormulaCatalog.PowerOnRateCode &&
+            !formula.PrimaryVariable.Equals(DefaultFormulaCatalog.DefaultPowerOnVariable, StringComparison.OrdinalIgnoreCase))
+        {
+            formula.PrimaryVariable = DefaultFormulaCatalog.DefaultPowerOnVariable;
+            changed = true;
+        }
+        else if (string.IsNullOrWhiteSpace(formula.PrimaryVariable))
         {
             formula.PrimaryVariable = parsed?.PrimaryVariable
                 ?? (formula.Code == DefaultFormulaCatalog.UtilizationRateCode
@@ -738,6 +747,11 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             formula.Coefficient = parsed?.Coefficient ?? DefaultFormulaCatalog.DefaultCoefficient;
             changed = true;
         }
+        else if (formula.Coefficient == 1d && !string.Equals(formula.ResultUnit, "%", StringComparison.Ordinal))
+        {
+            formula.Coefficient = DefaultFormulaCatalog.DefaultCoefficient;
+            changed = true;
+        }
 
         var normalizedVisibleOptions = ParseVisibleOptions(formula.VisibleOptionsCsv, formula.PrimaryVariable);
         var normalizedCsv = string.Join(",", normalizedVisibleOptions);
@@ -754,9 +768,9 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             changed = true;
         }
 
-        if (!string.IsNullOrEmpty(formula.ResultUnit))
+        if (!string.Equals(formula.ResultUnit, "%", StringComparison.Ordinal))
         {
-            formula.ResultUnit = string.Empty;
+            formula.ResultUnit = "%";
             changed = true;
         }
 

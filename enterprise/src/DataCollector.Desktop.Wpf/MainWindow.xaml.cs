@@ -33,8 +33,8 @@ public partial class MainWindow : Window
         "待机时间",
         "关机时间",
     };
-    private FormulaSelection _powerOnFormulaSelection = new("开机时间", 10d, 1d);
-    private FormulaSelection _utilizationFormulaSelection = new("加工时间", 10d, 1d);
+    private FormulaSelection _powerOnFormulaSelection = new("开机时间", 10d, 100d);
+    private FormulaSelection _utilizationFormulaSelection = new("加工时间", 10d, 100d);
 
     public MainWindow()
     {
@@ -544,10 +544,10 @@ public partial class MainWindow : Window
     {
         var visibleOptions = GetVisibleFormulaOptions();
 
-        PowerOnMetricComboBox.ItemsSource = visibleOptions;
+        PowerOnMetricComboBox.ItemsSource = _formulaOptions.Where(option => option.VariableName == "开机时间").ToList();
         UtilizationMetricComboBox.ItemsSource = visibleOptions;
 
-        PowerOnMetricComboBox.SelectedValue = _powerOnFormulaSelection.PrimaryVariable;
+        PowerOnMetricComboBox.SelectedValue = "开机时间";
         UtilizationMetricComboBox.SelectedValue = _utilizationFormulaSelection.PrimaryVariable;
 
         PowerOnStandardHoursTextBlock.Text = $"{_powerOnFormulaSelection.StandardWorkHours:0.##} 小时";
@@ -588,7 +588,7 @@ public partial class MainWindow : Window
             return new FormulaSelection(formula.PrimaryVariable, formula.StandardWorkHours, formula.Coefficient);
         }
 
-        return new FormulaSelection(defaultVariable, 10d, 1d);
+        return new FormulaSelection(defaultVariable, 10d, 100d);
     }
 
     private static string BuildFormulaExpression(FormulaSelection selection)
@@ -1003,8 +1003,8 @@ public partial class MainWindow : Window
             WaitingMinutesText = row.WaitingMinutes.ToString("F2"),
             StandbyMinutesText = row.StandbyMinutes.ToString("F2"),
             PowerOffMinutesText = row.PowerOffMinutes.ToString("F2"),
-            PowerOnRateText = row.PowerOnRate.ToString("F2", CultureInfo.InvariantCulture),
-            UtilizationRateText = row.UtilizationRate.ToString("F2", CultureInfo.InvariantCulture),
+            PowerOnRateText = $"{row.PowerOnRate.ToString("F2", CultureInfo.InvariantCulture)}%",
+            UtilizationRateText = $"{row.UtilizationRate.ToString("F2", CultureInfo.InvariantCulture)}%",
             DataQualityText = TranslateDataQuality(row.DataQualityCode),
         };
     }

@@ -268,7 +268,7 @@
                                 <TextBlock Grid.Row="3"
                                            Margin="0,40,0,0"
                                            Foreground="{StaticResource TextSecondaryBrush}"
-                                           Text="当前开机率按 时间项 / 制式工时(小时) × 系数 自动计算。" />
+                                           Text="当前开机率按 开机时间 / 制式工时(小时) × 系数 自动计算，结果按 % 显示。" />
                             </Grid>
                         </GroupBox>
 
@@ -324,7 +324,7 @@
                                 <TextBlock Grid.Row="3"
                                            Margin="0,40,0,0"
                                            Foreground="{StaticResource TextSecondaryBrush}"
-                                           Text="当前利用率按 时间项 / 制式工时(小时) × 系数 自动计算。" />
+                                           Text="当前利用率按 时间项 / 制式工时(小时) × 系数 自动计算，结果按 % 显示。" />
                             </Grid>
                         </GroupBox>
                     </Grid>
@@ -348,8 +348,8 @@
                                 <DataGridTextColumn Header="等待时间(分钟)" Binding="{Binding WaitingMinutesText}" Width="115" />
                                 <DataGridTextColumn Header="待机时间(分钟)" Binding="{Binding StandbyMinutesText}" Width="115" />
                                 <DataGridTextColumn Header="关机时间(分钟)" Binding="{Binding PowerOffMinutesText}" Width="115" />
-                                <DataGridTextColumn Header="开机率" Binding="{Binding PowerOnRateText}" Width="90" />
-                                <DataGridTextColumn Header="利用率" Binding="{Binding UtilizationRateText}" Width="90" />
+                                <DataGridTextColumn Header="开机率(%)" Binding="{Binding PowerOnRateText}" Width="90" />
+                                <DataGridTextColumn Header="利用率(%)" Binding="{Binding UtilizationRateText}" Width="90" />
                                 <DataGridTextColumn Header="采集质量" Binding="{Binding DataQualityText}" Width="110" />
                             </DataGrid.Columns>
                         </DataGrid>

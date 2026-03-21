@@ -51,10 +51,11 @@
                     </Grid.ColumnDefinitions>
 
                     <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="时间项" />
-                    <ComboBox x:Name="PowerOnMetricComboBox"
-                              Grid.Column="1"
-                              DisplayMemberPath="DisplayName"
-                              SelectedValuePath="VariableName" />
+                    <TextBlock x:Name="PowerOnMetricTextBlock"
+                               Grid.Column="1"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextPrimaryBrush}"
+                               Text="开机时间" />
 
                     <TextBlock Grid.Row="1" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="制式工时" />
                     <TextBox x:Name="PowerOnStandardHoursTextBox"
