@@ -101,6 +101,20 @@ class MockFocasClient:
             }
         ]
 
+    def read_spindle_metrics(self) -> dict[str, int | float]:
+        return {
+            "spindle_speed_rpm": 1850,
+            "spindle_override_signal": 10,
+            "spindle_override_percent": 100,
+            "spindle_load_percent": 42,
+        }
+
+    def read_current_program(self) -> dict[str, int | str]:
+        return {
+            "current_program_number": 1234,
+            "current_program_name": "O1234 MOCK",
+        }
+
     def read_alarm_details(self) -> list[dict[str, int | str]]:
         return [
             {

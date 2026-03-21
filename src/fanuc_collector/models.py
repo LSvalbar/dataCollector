@@ -35,6 +35,8 @@ class MachineStatus:
     controller_mode_text: str
     oee_status_number: int
     oee_status_text: str
+    machine_state_code: str = "unknown"
+    machine_state_text: str = "未知"
     native_power_on_total_ms: int | None = None
     native_operating_total_ms: int | None = None
     native_cutting_total_ms: int | None = None
@@ -55,6 +57,8 @@ class MachineStatus:
             controller_mode_text="Offline",
             oee_status_number=0,
             oee_status_text="Offline",
+            machine_state_code="power_off",
+            machine_state_text="关机",
             native_power_on_total_ms=None,
             native_operating_total_ms=None,
             native_cutting_total_ms=None,
@@ -79,7 +83,9 @@ class CounterDelta:
     run_ms: int = 0
     cutting_ms: int = 0
     cycle_ms: int = 0
+    waiting_ms: int = 0
     idle_ms: int = 0
+    spindle_run_ms: int = 0
     alarm_ms: int = 0
     emergency_ms: int = 0
     sample_count: int = 0
@@ -89,6 +95,7 @@ class CounterDelta:
 class WriteEnvelope:
     system_info: SystemInfo | None = None
     snapshot: MachineStatus | None = None
+    latest_snapshot: MachineStatus | None = None
     transitions: list[StateTransition] = field(default_factory=list)
     counter_delta: CounterDelta | None = None
 

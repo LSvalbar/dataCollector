@@ -110,6 +110,8 @@ class StorageWriter:
                 operation_mode INTEGER NOT NULL,
                 emergency_state INTEGER NOT NULL,
                 alarm_state INTEGER NOT NULL,
+                machine_state_code TEXT NOT NULL DEFAULT '',
+                machine_state_text TEXT NOT NULL DEFAULT '',
                 controller_mode_number INTEGER NOT NULL,
                 controller_mode_text TEXT NOT NULL,
                 oee_status_number INTEGER NOT NULL,
@@ -135,7 +137,9 @@ class StorageWriter:
                 run_ms INTEGER NOT NULL DEFAULT 0,
                 cutting_ms INTEGER NOT NULL DEFAULT 0,
                 cycle_ms INTEGER NOT NULL DEFAULT 0,
+                waiting_ms INTEGER NOT NULL DEFAULT 0,
                 idle_ms INTEGER NOT NULL DEFAULT 0,
+                spindle_run_ms INTEGER NOT NULL DEFAULT 0,
                 alarm_ms INTEGER NOT NULL DEFAULT 0,
                 emergency_ms INTEGER NOT NULL DEFAULT 0,
                 sample_count INTEGER NOT NULL DEFAULT 0,
@@ -149,9 +153,13 @@ class StorageWriter:
             );
             """
         )
+        self._ensure_column(connection, "poll_snapshots", "machine_state_code", "TEXT NOT NULL DEFAULT ''")
+        self._ensure_column(connection, "poll_snapshots", "machine_state_text", "TEXT NOT NULL DEFAULT ''")
         self._ensure_column(connection, "daily_counters", "cutting_ms", "INTEGER NOT NULL DEFAULT 0")
         self._ensure_column(connection, "daily_counters", "cycle_ms", "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column(connection, "daily_counters", "waiting_ms", "INTEGER NOT NULL DEFAULT 0")
         self._ensure_column(connection, "daily_counters", "idle_ms", "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column(connection, "daily_counters", "spindle_run_ms", "INTEGER NOT NULL DEFAULT 0")
         connection.commit()
 
     def _ensure_column(self, connection: sqlite3.Connection, table_name: str, column_name: str, column_sql: str) -> None:
@@ -179,6 +187,9 @@ class StorageWriter:
 
         with connection:
             for envelope in pending:
+                if envelope.latest_snapshot is not None:
+                    latest_rows.update(_latest_values_from_snapshot(envelope.latest_snapshot))
+
                 if envelope.snapshot is not None:
                     snapshot = envelope.snapshot
                     connection.execute(
@@ -190,12 +201,14 @@ class StorageWriter:
                             operation_mode,
                             emergency_state,
                             alarm_state,
+                            machine_state_code,
+                            machine_state_text,
                             controller_mode_number,
                             controller_mode_text,
                             oee_status_number,
                             oee_status_text,
                             raw_json
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             isoformat_utc(snapshot.collected_at),
@@ -204,6 +217,8 @@ class StorageWriter:
                             snapshot.operation_mode,
                             snapshot.emergency_state,
                             snapshot.alarm_state,
+                            snapshot.machine_state_code,
+                            snapshot.machine_state_text,
                             snapshot.controller_mode_number,
                             snapshot.controller_mode_text,
                             snapshot.oee_status_number,
@@ -211,7 +226,6 @@ class StorageWriter:
                             json.dumps(snapshot.raw_payload, ensure_ascii=True, separators=(",", ":")),
                         ),
                     )
-                    latest_rows.update(_latest_values_from_snapshot(snapshot))
 
                 if envelope.transitions:
                     latest_rows.update(_latest_values_from_transitions(envelope.transitions))
@@ -292,18 +306,22 @@ class StorageWriter:
                             run_ms,
                             cutting_ms,
                             cycle_ms,
+                            waiting_ms,
                             idle_ms,
+                            spindle_run_ms,
                             alarm_ms,
                             emergency_ms,
                             sample_count,
                             updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(day) DO UPDATE SET
                             power_on_ms = daily_counters.power_on_ms + excluded.power_on_ms,
                             run_ms = daily_counters.run_ms + excluded.run_ms,
                             cutting_ms = daily_counters.cutting_ms + excluded.cutting_ms,
                             cycle_ms = daily_counters.cycle_ms + excluded.cycle_ms,
+                            waiting_ms = daily_counters.waiting_ms + excluded.waiting_ms,
                             idle_ms = daily_counters.idle_ms + excluded.idle_ms,
+                            spindle_run_ms = daily_counters.spindle_run_ms + excluded.spindle_run_ms,
                             alarm_ms = daily_counters.alarm_ms + excluded.alarm_ms,
                             emergency_ms = daily_counters.emergency_ms + excluded.emergency_ms,
                             sample_count = daily_counters.sample_count + excluded.sample_count,
@@ -315,7 +333,9 @@ class StorageWriter:
                             counter.run_ms,
                             counter.cutting_ms,
                             counter.cycle_ms,
+                            counter.waiting_ms,
                             counter.idle_ms,
+                            counter.spindle_run_ms,
                             counter.alarm_ms,
                             counter.emergency_ms,
                             counter.sample_count,
@@ -349,6 +369,8 @@ def _latest_values_from_snapshot(snapshot: MachineStatus) -> dict[str, tuple[str
         "machine_ip": (str(snapshot.raw_payload.get("machine_ip", "")), updated_at),
         "machine_port": (str(snapshot.raw_payload.get("machine_port", "")), updated_at),
         "machine_online": (str(snapshot.machine_online), updated_at),
+        "machine_state_code": (snapshot.machine_state_code, updated_at),
+        "machine_state_text": (snapshot.machine_state_text, updated_at),
         "automatic_mode": (str(snapshot.automatic_mode), updated_at),
         "operation_mode": (str(snapshot.operation_mode), updated_at),
         "emergency_state": (str(snapshot.emergency_state), updated_at),
@@ -362,6 +384,12 @@ def _latest_values_from_snapshot(snapshot: MachineStatus) -> dict[str, tuple[str
         "native_cutting_total_ms": (_optional_number_text(snapshot.native_cutting_total_ms), updated_at),
         "native_cycle_total_ms": (_optional_number_text(snapshot.native_cycle_total_ms), updated_at),
         "native_free_total_ms": (_optional_number_text(snapshot.native_free_total_ms), updated_at),
+        "spindle_speed_rpm": (str(snapshot.raw_payload.get("spindle_speed_rpm", "")), updated_at),
+        "spindle_override_percent": (str(snapshot.raw_payload.get("spindle_override_percent", "")), updated_at),
+        "spindle_load_percent": (str(snapshot.raw_payload.get("spindle_load_percent", "")), updated_at),
+        "current_program_number": (str(snapshot.raw_payload.get("current_program_number", "")), updated_at),
+        "current_program_name": (str(snapshot.raw_payload.get("current_program_name", "")), updated_at),
+        "current_program_processing_ms": (str(snapshot.raw_payload.get("current_program_processing_ms", "")), updated_at),
         "current_alarm_text": (str(snapshot.raw_payload.get("current_alarm_text", "")), updated_at),
         "last_processing_program_number": (str(snapshot.raw_payload.get("last_processing_program_number", "")), updated_at),
         "last_processing_duration_ms": (str(snapshot.raw_payload.get("last_processing_duration_ms", "")), updated_at),
@@ -386,7 +414,7 @@ def _latest_values_from_transitions(transitions) -> dict[str, tuple[str, str]]:
 def _latest_counter_keys(connection: sqlite3.Connection, day: str) -> dict[str, tuple[str, str]]:
     row = connection.execute(
         """
-        SELECT power_on_ms, run_ms, cutting_ms, cycle_ms, idle_ms, alarm_ms, emergency_ms, updated_at
+        SELECT power_on_ms, run_ms, cutting_ms, cycle_ms, waiting_ms, idle_ms, spindle_run_ms, alarm_ms, emergency_ms, updated_at
         FROM daily_counters
         WHERE day = ?
         """,
@@ -395,7 +423,7 @@ def _latest_counter_keys(connection: sqlite3.Connection, day: str) -> dict[str, 
     if row is None:
         return {}
 
-    power_on_ms, run_ms, cutting_ms, cycle_ms, idle_ms, alarm_ms, emergency_ms, updated_at = row
+    power_on_ms, run_ms, cutting_ms, cycle_ms, waiting_ms, idle_ms, spindle_run_ms, alarm_ms, emergency_ms, updated_at = row
     utilization = 0.0 if int(power_on_ms) <= 0 else (int(run_ms) / int(power_on_ms)) * 100.0
     return {
         "counter_day": (day, updated_at),
@@ -403,7 +431,9 @@ def _latest_counter_keys(connection: sqlite3.Connection, day: str) -> dict[str, 
         "today_processing_ms": (str(run_ms), updated_at),
         "today_cutting_ms": (str(cutting_ms), updated_at),
         "today_cycle_ms": (str(cycle_ms), updated_at),
+        "today_waiting_ms": (str(waiting_ms), updated_at),
         "today_idle_ms": (str(idle_ms), updated_at),
+        "today_spindle_run_ms": (str(spindle_run_ms), updated_at),
         "today_alarm_ms": (str(alarm_ms), updated_at),
         "today_emergency_ms": (str(emergency_ms), updated_at),
         "today_utilization_percent": (f"{utilization:.2f}", updated_at),
@@ -438,9 +468,12 @@ def read_daily_timeline(
             SELECT
                 collected_at,
                 machine_online,
+                automatic_mode,
                 operation_mode,
                 emergency_state,
-                alarm_state
+                alarm_state,
+                machine_state_code,
+                raw_json
             FROM poll_snapshots
             WHERE collected_at < ?
             ORDER BY collected_at DESC
@@ -455,9 +488,12 @@ def read_daily_timeline(
                 SELECT
                     collected_at,
                     machine_online,
+                    automatic_mode,
                     operation_mode,
                     emergency_state,
-                    alarm_state
+                    alarm_state,
+                    machine_state_code,
+                    raw_json
                 FROM poll_snapshots
                 WHERE collected_at >= ? AND collected_at <= ?
                 ORDER BY collected_at ASC
@@ -485,13 +521,18 @@ def read_daily_timeline(
         if interval_end <= interval_start:
             continue
 
-        state_code = _timeline_state_code(
-            machine_online=int(row["machine_online"]),
-            operation_mode=int(row["operation_mode"]),
-            emergency_state=int(row["emergency_state"]),
-            alarm_state=int(row["alarm_state"]),
-            running_modes=running_mode_set,
-        )
+        state_code = str(row["machine_state_code"] or "").strip()
+        if not state_code:
+            raw_payload = _parse_raw_json(row["raw_json"])
+            state_code = _timeline_state_code(
+                machine_online=int(row["machine_online"]),
+                automatic_mode=int(row["automatic_mode"]),
+                operation_mode=int(row["operation_mode"]),
+                emergency_state=int(row["emergency_state"]),
+                alarm_state=int(row["alarm_state"]),
+                spindle_speed_rpm=int(raw_payload.get("spindle_speed_rpm", 0) or 0),
+                running_modes=running_mode_set,
+            )
         _append_timeline_segment(segments, state_code, interval_start, interval_end)
 
     return segments
@@ -506,20 +547,34 @@ def _resolve_report_timezone(report_tz: tzinfo_type | None) -> tzinfo_type:
 
 def _timeline_state_code(
     machine_online: int,
+    automatic_mode: int,
     operation_mode: int,
     emergency_state: int,
     alarm_state: int,
+    spindle_speed_rpm: int,
     running_modes: set[int],
 ) -> str:
-    if machine_online == 0:
-        return "power_off"
-    if emergency_state:
-        return "emergency"
-    if alarm_state:
-        return "alarm"
-    if operation_mode in running_modes:
-        return "processing"
-    return "idle"
+    from .state_logic import classify_machine_state
+
+    state_code, _ = classify_machine_state(
+        machine_online=machine_online,
+        automatic_mode=automatic_mode,
+        operation_mode=operation_mode,
+        emergency_state=emergency_state,
+        alarm_state=alarm_state,
+        spindle_speed_rpm=spindle_speed_rpm,
+        configured_running_modes=running_modes,
+    )
+    return state_code
+
+
+def _parse_raw_json(value: str | None) -> dict:
+    if not value:
+        return {}
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return {}
 
 
 def _append_timeline_segment(
@@ -562,6 +617,8 @@ def export_snapshots_to_csv(db_path: str, output_path: str) -> None:
                 "operation_mode",
                 "emergency_state",
                 "alarm_state",
+                "machine_state_code",
+                "machine_state_text",
                 "controller_mode_number",
                 "controller_mode_text",
                 "oee_status_number",
@@ -578,6 +635,8 @@ def export_snapshots_to_csv(db_path: str, output_path: str) -> None:
                 operation_mode,
                 emergency_state,
                 alarm_state,
+                machine_state_code,
+                machine_state_text,
                 controller_mode_number,
                 controller_mode_text,
                 oee_status_number,

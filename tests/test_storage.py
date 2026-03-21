@@ -44,7 +44,9 @@ class StorageHelpersTest(unittest.TestCase):
                 run_ms INTEGER NOT NULL,
                 cutting_ms INTEGER NOT NULL,
                 cycle_ms INTEGER NOT NULL,
+                waiting_ms INTEGER NOT NULL,
                 idle_ms INTEGER NOT NULL,
+                spindle_run_ms INTEGER NOT NULL,
                 alarm_ms INTEGER NOT NULL,
                 emergency_ms INTEGER NOT NULL,
                 sample_count INTEGER NOT NULL,
@@ -55,10 +57,10 @@ class StorageHelpersTest(unittest.TestCase):
         connection.execute(
             """
             INSERT INTO daily_counters (
-                day, power_on_ms, run_ms, cutting_ms, cycle_ms, idle_ms, alarm_ms, emergency_ms, sample_count, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                day, power_on_ms, run_ms, cutting_ms, cycle_ms, waiting_ms, idle_ms, spindle_run_ms, alarm_ms, emergency_ms, sample_count, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            ("2026-03-20", 10000, 2500, 1500, 1800, 7000, 300, 200, 1, "2026-03-20T08:00:00.000+00:00"),
+            ("2026-03-20", 10000, 2500, 1500, 1800, 5000, 2000, 2200, 300, 200, 1, "2026-03-20T08:00:00.000+00:00"),
         )
 
         latest = _latest_counter_keys(connection, "2026-03-20")
@@ -66,7 +68,9 @@ class StorageHelpersTest(unittest.TestCase):
         self.assertEqual(latest["today_processing_ms"][0], "2500")
         self.assertEqual(latest["today_cutting_ms"][0], "1500")
         self.assertEqual(latest["today_cycle_ms"][0], "1800")
-        self.assertEqual(latest["today_idle_ms"][0], "7000")
+        self.assertEqual(latest["today_waiting_ms"][0], "5000")
+        self.assertEqual(latest["today_idle_ms"][0], "2000")
+        self.assertEqual(latest["today_spindle_run_ms"][0], "2200")
         self.assertEqual(latest["today_alarm_ms"][0], "300")
         self.assertEqual(latest["today_emergency_ms"][0], "200")
         self.assertEqual(latest["today_utilization_percent"][0], "25.00")
@@ -91,7 +95,9 @@ class StorageHelpersTest(unittest.TestCase):
                         run_ms=200,
                         cutting_ms=100,
                         cycle_ms=150,
+                        waiting_ms=700,
                         idle_ms=800,
+                        spindle_run_ms=120,
                         alarm_ms=0,
                         emergency_ms=0,
                         sample_count=1,
@@ -101,13 +107,17 @@ class StorageHelpersTest(unittest.TestCase):
             writer.stop()
 
             with sqlite3.connect(db_path) as connection:
-                row = connection.execute("SELECT day, power_on_ms, run_ms, cutting_ms, cycle_ms FROM daily_counters").fetchone()
+                row = connection.execute(
+                    "SELECT day, power_on_ms, run_ms, cutting_ms, cycle_ms, waiting_ms, spindle_run_ms FROM daily_counters"
+                ).fetchone()
 
             self.assertEqual(row[0], "2026-03-20")
             self.assertEqual(row[1], 1000)
             self.assertEqual(row[2], 200)
             self.assertEqual(row[3], 100)
             self.assertEqual(row[4], 150)
+            self.assertEqual(row[5], 700)
+            self.assertEqual(row[6], 120)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 

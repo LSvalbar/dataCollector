@@ -28,18 +28,20 @@ class TimelineReportTest(unittest.TestCase):
                         operation_mode,
                         emergency_state,
                         alarm_state,
+                        machine_state_code,
+                        machine_state_text,
                         controller_mode_number,
                         controller_mode_text,
                         oee_status_number,
                         oee_status_text,
                         raw_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     [
-                        ("2026-03-10T09:00:00.000+00:00", 1, 1, 1, 0, 0, 1, "Memory", 3, "Running", "{}"),
-                        ("2026-03-10T09:30:00.000+00:00", 1, 1, 0, 0, 0, 1, "Memory", 4, "Interrupted", "{}"),
-                        ("2026-03-10T17:05:32.000+00:00", 0, -1, -1, 0, 0, -1, "Offline", 0, "Offline", "{}"),
-                        ("2026-03-10T20:05:32.000+00:00", 1, 1, 0, 0, 0, 1, "Memory", 4, "Interrupted", "{}"),
+                        ("2026-03-10T09:00:00.000+00:00", 1, 1, 3, 0, 0, "processing", "加工", 1, "Memory", 3, "Running", "{\"spindle_speed_rpm\":1800}"),
+                        ("2026-03-10T09:30:00.000+00:00", 1, 1, 2, 0, 0, "waiting", "等待", 1, "Memory", 4, "Interrupted", "{\"spindle_speed_rpm\":0}"),
+                        ("2026-03-10T17:05:32.000+00:00", 0, -1, -1, 0, 0, "power_off", "关机", -1, "Offline", 0, "Offline", "{}"),
+                        ("2026-03-10T20:05:32.000+00:00", 1, 4, 1, 0, 0, "idle", "待机", 4, "Handle", 4, "Interrupted", "{\"spindle_speed_rpm\":0}"),
                     ],
                 )
                 connection.commit()

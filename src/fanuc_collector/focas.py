@@ -9,6 +9,7 @@ import struct
 import sys
 
 from .models import MachineStatus, SystemInfo, utc_now
+from .state_logic import spindle_override_percent
 
 
 EW_OK = 0
@@ -19,6 +20,8 @@ TYPE_OPERATING = 1
 TYPE_CUTTING = 2
 TYPE_CYCLE = 3
 TYPE_FREE = 4
+SP_ALL_TYPE = -1
+PANEL_SIGNAL_ALL = -1
 
 FOCAS_ERROR_DETAILS = {
     -17: ("EW_PROTOCOL", "协议错误"),
@@ -134,6 +137,69 @@ class IODBTIME(ctypes.Structure):
     ]
 
 
+class ODBACT(ctypes.Structure):
+    _fields_ = [
+        ("dummy", c_short * 2),
+        ("data", c_long),
+    ]
+
+
+class LOADELM(ctypes.Structure):
+    _fields_ = [
+        ("data", c_long),
+        ("dec", c_short),
+        ("unit", c_short),
+        ("name", c_char),
+        ("suff1", c_char),
+        ("suff2", c_char),
+        ("reserve", c_char),
+    ]
+
+
+class ODBSPLOAD(ctypes.Structure):
+    _fields_ = [
+        ("spload", LOADELM),
+        ("spspeed", LOADELM),
+    ]
+
+
+class ODBSPN(ctypes.Structure):
+    _fields_ = [
+        ("datano", c_short),
+        ("type", c_short),
+        ("data", c_short * 8),
+    ]
+
+
+class ODBEXEPRG(ctypes.Structure):
+    _fields_ = [
+        ("name", c_char * 36),
+        ("o_num", c_long),
+    ]
+
+
+class IODBSGNL(ctypes.Structure):
+    _fields_ = [
+        ("datano", c_short),
+        ("type", c_short),
+        ("mode", c_short),
+        ("hndl_ax", c_short),
+        ("hndl_mv", c_short),
+        ("rpd_ovrd", c_short),
+        ("jog_ovrd", c_short),
+        ("feed_ovrd", c_short),
+        ("spdl_ovrd", c_short),
+        ("blck_del", c_short),
+        ("sngl_blck", c_short),
+        ("machn_lock", c_short),
+        ("dry_run", c_short),
+        ("mem_prtct", c_short),
+        ("feed_hold", c_short),
+        ("manual_rpd", c_short),
+        ("dummy", c_short * 2),
+    ]
+
+
 class ALMINFO2_ENTRY(ctypes.Structure):
     _fields_ = [
         ("axis", c_short),
@@ -187,6 +253,16 @@ def _decode_text(raw_value, length: int | None = None) -> str:
     if length is not None and length >= 0:
         data = data[:length]
     return data.decode("ascii", errors="ignore").replace("\x00", "").strip()
+
+
+def _scale_numeric_value(raw_value: int, decimal_places: int) -> int | float:
+    scale = int(decimal_places)
+    if scale <= 0:
+        return int(raw_value)
+    value = int(raw_value) / (10 ** scale)
+    if float(value).is_integer():
+        return int(value)
+    return round(value, min(scale, 3))
 
 
 def controller_mode_text(mode: int) -> str:
@@ -253,6 +329,16 @@ class FocasClient:
         self._lib.cnc_sysinfo.restype = c_short
         self._lib.cnc_statinfo.argtypes = [c_ushort, POINTER(ODBST)]
         self._lib.cnc_statinfo.restype = c_short
+        self._lib.cnc_acts.argtypes = [c_ushort, POINTER(ODBACT)]
+        self._lib.cnc_acts.restype = c_short
+        self._lib.cnc_rdspmeter.argtypes = [c_ushort, c_short, POINTER(c_short), POINTER(ODBSPLOAD)]
+        self._lib.cnc_rdspmeter.restype = c_short
+        self._lib.cnc_rdspload.argtypes = [c_ushort, c_short, POINTER(ODBSPN)]
+        self._lib.cnc_rdspload.restype = c_short
+        self._lib.cnc_exeprgname.argtypes = [c_ushort, POINTER(ODBEXEPRG)]
+        self._lib.cnc_exeprgname.restype = c_short
+        self._lib.cnc_rdopnlsgnl.argtypes = [c_ushort, c_short, POINTER(IODBSGNL)]
+        self._lib.cnc_rdopnlsgnl.restype = c_short
         self._lib.cnc_rdtimer.argtypes = [c_ushort, c_short, POINTER(IODBTIME)]
         self._lib.cnc_rdtimer.restype = c_short
         self._lib.cnc_rdproctime.argtypes = [c_ushort, POINTER(ODBPTIME)]
@@ -375,6 +461,48 @@ class FocasClient:
 
         return values
 
+    def read_spindle_metrics(self) -> dict[str, int | float]:
+        self._ensure_connected()
+        values: dict[str, int | float] = {}
+
+        spindle_speed = self._read_actual_spindle_speed()
+        if spindle_speed is not None:
+            values["spindle_speed_rpm"] = spindle_speed
+
+        spindle_load, spindle_meter_speed = self._read_spindle_meter()
+        if spindle_load is None:
+            spindle_load = self._read_spindle_load_fallback()
+        if spindle_load is not None:
+            values["spindle_load_percent"] = spindle_load
+        if spindle_speed is None and spindle_meter_speed is not None:
+            values["spindle_speed_rpm"] = spindle_meter_speed
+
+        spindle_override_raw = self._read_spindle_override_signal()
+        if spindle_override_raw is not None:
+            values["spindle_override_signal"] = spindle_override_raw
+            spindle_override_value = spindle_override_percent(spindle_override_raw)
+            if spindle_override_value is not None:
+                values["spindle_override_percent"] = spindle_override_value
+
+        return values
+
+    def read_current_program(self) -> dict[str, int | str]:
+        self._ensure_connected()
+        buffer = ODBEXEPRG()
+        result = self._lib.cnc_exeprgname(self._handle, byref(buffer))
+        if result != EW_OK:
+            return {}
+
+        program_name = _decode_text(buffer.name)
+        program_number = int(buffer.o_num)
+        if program_number == 0 and not program_name:
+            return {}
+
+        return {
+            "current_program_number": program_number,
+            "current_program_name": program_name,
+        }
+
     def read_processing_time_records(self) -> list[dict[str, int]]:
         self._ensure_connected()
         buffer = ODBPTIME()
@@ -419,6 +547,40 @@ class FocasClient:
         if result != EW_OK:
             return None, int(result)
         return int(buffer.minute) * 60_000 + int(buffer.msec), None
+
+    def _read_actual_spindle_speed(self) -> int | None:
+        buffer = ODBACT()
+        result = self._lib.cnc_acts(self._handle, byref(buffer))
+        if result != EW_OK:
+            return None
+        return max(0, int(buffer.data))
+
+    def _read_spindle_meter(self) -> tuple[float | int | None, float | int | None]:
+        data_count = c_short(1)
+        buffer = ODBSPLOAD()
+        result = self._lib.cnc_rdspmeter(self._handle, SP_ALL_TYPE, byref(data_count), byref(buffer))
+        if result != EW_OK:
+            return None, None
+        spindle_load = _scale_numeric_value(buffer.spload.data, buffer.spload.dec)
+        spindle_speed = _scale_numeric_value(buffer.spspeed.data, buffer.spspeed.dec)
+        return spindle_load, spindle_speed
+
+    def _read_spindle_load_fallback(self) -> int | None:
+        buffer = ODBSPN()
+        result = self._lib.cnc_rdspload(self._handle, 1, byref(buffer))
+        if result != EW_OK:
+            return None
+        try:
+            return max(0, int(buffer.data[0]))
+        except (IndexError, TypeError):
+            return None
+
+    def _read_spindle_override_signal(self) -> int | None:
+        buffer = IODBSGNL()
+        result = self._lib.cnc_rdopnlsgnl(self._handle, PANEL_SIGNAL_ALL, byref(buffer))
+        if result != EW_OK:
+            return None
+        return int(buffer.spdl_ovrd)
 
     def _read_alarm_messages(self) -> list[dict[str, int | str]]:
         max_alarm_count = 10

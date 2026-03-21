@@ -11,6 +11,7 @@ from .config import AppConfig
 from .focas import FocasClient, FocasCommunicationError, FocasLibraryLoadError
 from .mock_driver import MockFocasClient
 from .models import CounterDelta, MachineStatus, StateTransition, WriteEnvelope, utc_now
+from .state_logic import classify_machine_state, to_int
 from .storage import StorageWriter
 
 
@@ -20,6 +21,7 @@ TRACKED_FIELDS = (
     "operation_mode",
     "emergency_state",
     "alarm_state",
+    "machine_state_code",
     "controller_mode_text",
     "oee_status_text",
 )
@@ -62,10 +64,12 @@ class CollectorRuntime:
                         status = self._client.read_status()
                         self._decorate_snapshot(status)
                         self._enrich_status_details(status)
+                        self._apply_state_classification(status)
                         self._writer.enqueue(
                             WriteEnvelope(
                                 system_info=system_info,
                                 snapshot=status,
+                                latest_snapshot=status,
                                 transitions=self._build_transitions(previous_status, status),
                             )
                         )
@@ -74,9 +78,11 @@ class CollectorRuntime:
                         status = self._client.read_status()
                         self._decorate_snapshot(status)
                         self._enrich_status_details(status)
+                        self._apply_state_classification(status)
                         self._writer.enqueue(
                             WriteEnvelope(
                                 snapshot=status,
+                                latest_snapshot=status,
                                 transitions=self._build_transitions(previous_status, status),
                             )
                         )
@@ -105,11 +111,13 @@ class CollectorRuntime:
                         should_read_details = should_snapshot or bool(transitions) or bool(status.alarm_state)
                         if should_read_details:
                             self._enrich_status_details(status)
+                        self._apply_state_classification(status)
 
                         if should_snapshot or transitions or counter_delta is not None:
                             self._writer.enqueue(
                                 WriteEnvelope(
                                     snapshot=status if (should_snapshot or transitions) else None,
+                                    latest_snapshot=status,
                                     transitions=transitions,
                                     counter_delta=counter_delta,
                                 )
@@ -137,6 +145,7 @@ class CollectorRuntime:
                     self._writer.enqueue(
                         WriteEnvelope(
                             snapshot=offline_status,
+                            latest_snapshot=offline_status,
                             transitions=transitions,
                             counter_delta=counter_delta,
                         )
@@ -178,13 +187,33 @@ class CollectorRuntime:
         status.raw_payload["machine_port"] = self._config.machine.port
 
     def _enrich_status_details(self, status: MachineStatus) -> None:
+        spindle_metrics = self._client.read_spindle_metrics()
+        for key, value in spindle_metrics.items():
+            status.raw_payload[key] = value
+
+        current_program = self._client.read_current_program()
+        for key, value in current_program.items():
+            status.raw_payload[key] = value
+
         processing_records = self._client.read_processing_time_records()
         status.raw_payload["processing_time_record_count"] = len(processing_records)
         if processing_records:
             status.raw_payload["processing_time_records_json"] = json.dumps(processing_records, ensure_ascii=True, separators=(",", ":"))
-            latest_record = processing_records[0]
-            status.raw_payload["last_processing_program_number"] = int(latest_record["program_number"])
-            status.raw_payload["last_processing_duration_ms"] = int(latest_record["duration_ms"])
+            current_program_number = to_int(status.raw_payload.get("current_program_number"))
+            selected_record = None
+            if current_program_number is not None:
+                selected_record = next(
+                    (record for record in processing_records if int(record["program_number"]) == current_program_number),
+                    None,
+                )
+            if selected_record is None:
+                selected_record = processing_records[0]
+
+            status.raw_payload["current_program_processing_ms"] = int(selected_record["duration_ms"])
+            status.raw_payload["last_processing_program_number"] = int(selected_record["program_number"])
+            status.raw_payload["last_processing_duration_ms"] = int(selected_record["duration_ms"])
+        else:
+            status.raw_payload["current_program_processing_ms"] = 0
 
         if status.alarm_state:
             alarm_details = self._client.read_alarm_details()
@@ -200,6 +229,22 @@ class CollectorRuntime:
         else:
             status.raw_payload["alarm_detail_count"] = 0
             status.raw_payload["current_alarm_text"] = ""
+
+    def _apply_state_classification(self, status: MachineStatus) -> None:
+        spindle_speed_rpm = to_int(status.raw_payload.get("spindle_speed_rpm"))
+        state_code, state_text = classify_machine_state(
+            machine_online=status.machine_online,
+            automatic_mode=status.automatic_mode,
+            operation_mode=status.operation_mode,
+            emergency_state=status.emergency_state,
+            alarm_state=status.alarm_state,
+            spindle_speed_rpm=spindle_speed_rpm,
+            configured_running_modes=self._config.machine.running_operation_modes,
+        )
+        status.machine_state_code = state_code
+        status.machine_state_text = state_text
+        status.raw_payload["machine_state_code"] = state_code
+        status.raw_payload["machine_state_text"] = state_text
 
     def _build_transitions(
         self,
@@ -236,14 +281,8 @@ class CollectorRuntime:
         if elapsed_ms <= 0:
             return None
 
-        run_modes = set(self._config.machine.running_operation_modes)
-        is_running = previous_status.operation_mode in run_modes
-        is_idle = (
-            previous_status.machine_online == 1
-            and not is_running
-            and previous_status.alarm_state == 0
-            and previous_status.emergency_state == 0
-        )
+        spindle_speed_rpm = to_int(previous_status.raw_payload.get("spindle_speed_rpm")) or 0
+        previous_state = previous_status.machine_state_code
         power_on_delta = self._native_delta_ms(previous_status.native_power_on_total_ms, current_status.native_power_on_total_ms)
         operating_delta = self._native_delta_ms(previous_status.native_operating_total_ms, current_status.native_operating_total_ms)
         cutting_delta = self._native_delta_ms(previous_status.native_cutting_total_ms, current_status.native_cutting_total_ms)
@@ -252,10 +291,12 @@ class CollectorRuntime:
         return CounterDelta(
             collected_at=current_status.collected_at,
             power_on_ms=power_on_delta if power_on_delta is not None else (elapsed_ms if previous_status.machine_online else 0),
-            run_ms=operating_delta if operating_delta is not None else (elapsed_ms if is_running else 0),
-            cutting_ms=cutting_delta if cutting_delta is not None else 0,
-            cycle_ms=cycle_delta if cycle_delta is not None else 0,
-            idle_ms=free_delta if free_delta is not None else (elapsed_ms if is_idle else 0),
+            run_ms=operating_delta if operating_delta is not None else (elapsed_ms if previous_state in {"processing", "running"} else 0),
+            cutting_ms=cutting_delta if cutting_delta is not None else (elapsed_ms if previous_state == "processing" else 0),
+            cycle_ms=cycle_delta if cycle_delta is not None else (elapsed_ms if previous_state in {"processing", "running"} else 0),
+            waiting_ms=free_delta if free_delta is not None else (elapsed_ms if previous_state == "waiting" else 0),
+            idle_ms=elapsed_ms if previous_state == "idle" else 0,
+            spindle_run_ms=elapsed_ms if spindle_speed_rpm > 0 else 0,
             alarm_ms=elapsed_ms if previous_status.alarm_state else 0,
             emergency_ms=elapsed_ms if previous_status.emergency_state else 0,
             sample_count=1,
