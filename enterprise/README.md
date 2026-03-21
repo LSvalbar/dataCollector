@@ -37,6 +37,28 @@ dotnet run --project D:\Project\Codex\DataCollector\enterprise\src\DataCollector
 dotnet run --project D:\Project\Codex\DataCollector\enterprise\src\DataCollector.Agent.Worker
 ```
 
+## Win10 运行机发布
+
+如果运行机没有开发环境，不要复制源码直接运行，应该在开发机上执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File D:\Project\Codex\DataCollector\enterprise\scripts\Publish-Win10Portable.ps1
+```
+
+脚本会产出：
+
+`D:\Project\Codex\DataCollector\enterprise\dist\win-x64`
+
+把整个 `win-x64` 目录复制到 Win10 运行机，例如：
+
+`D:\source\dataCollector\enterprise\dist\win-x64`
+
+然后在运行机直接双击：
+
+`Start-Enterprise-All.bat`
+
+当前这套发布包是 `自包含 EXE`，不依赖运行机预装 .NET。
+
 ## 当前状态
 
 - 已有正式版工程骨架
