@@ -4,6 +4,7 @@
     <Project Path="src/DataCollector.Contracts/DataCollector.Contracts.csproj" />
     <Project Path="src/DataCollector.Core/DataCollector.Core.csproj" />
     <Project Path="src/DataCollector.Desktop.Wpf/DataCollector.Desktop.Wpf.csproj" />
+    <Project Path="src/DataCollector.Launcher.Wpf/DataCollector.Launcher.Wpf.csproj" />
     <Project Path="src/DataCollector.Server.Api/DataCollector.Server.Api.csproj" />
   </Folder>
   <Folder Name="/tests/">

@@ -22,7 +22,11 @@ public interface IEnterprisePlatformService
 
     Task<FormulaDefinitionDto> UpdateFormulaAsync(string code, FormulaUpdateRequest request, CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<FormulaVariableOptionDto>> GetFormulaVariableOptionsAsync(CancellationToken cancellationToken);
+
     Task<DeviceTimelineResponse> GetDeviceTimelineAsync(Guid deviceId, DateOnly reportDate, CancellationToken cancellationToken);
+
+    Task<AgentRuntimeConfigurationDto> GetAgentRuntimeConfigurationAsync(string agentNodeName, CancellationToken cancellationToken);
 
     Task<SecurityOverviewDto> GetSecurityOverviewAsync(CancellationToken cancellationToken);
 

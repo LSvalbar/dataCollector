@@ -24,6 +24,13 @@ public sealed class FormulaUpdateRequest
     public required string UpdatedBy { get; set; }
 }
 
+public sealed class FormulaVariableOptionDto
+{
+    public required string VariableName { get; set; }
+
+    public required string DisplayName { get; set; }
+}
+
 public sealed class DailyReportRowDto
 {
     public Guid DeviceId { get; set; }

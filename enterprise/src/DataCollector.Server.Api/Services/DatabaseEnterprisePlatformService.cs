@@ -284,6 +284,19 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             .ToArrayAsync(cancellationToken);
     }
 
+    public Task<IReadOnlyList<FormulaVariableOptionDto>> GetFormulaVariableOptionsAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult<IReadOnlyList<FormulaVariableOptionDto>>(
+            _formulaEngine.GetSupportedVariableNames()
+                .Select(variableName => new FormulaVariableOptionDto
+                {
+                    VariableName = variableName,
+                    DisplayName = variableName,
+                })
+                .ToArray());
+    }
+
     public async Task<FormulaDefinitionDto> UpdateFormulaAsync(string code, FormulaUpdateRequest request, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
@@ -349,6 +362,35 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
                 ["通信中断时间"] = metrics.CommunicationInterruptedMinutes,
             },
             SnapshotAt = now,
+        };
+    }
+
+    public async Task<AgentRuntimeConfigurationDto> GetAgentRuntimeConfigurationAsync(string agentNodeName, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(agentNodeName);
+
+        await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var devices = await dbContext.Devices
+            .AsNoTracking()
+            .Where(device => device.AgentNodeName == agentNodeName.Trim() && device.IsEnabled)
+            .OrderBy(device => device.DeviceCode)
+            .ToListAsync(cancellationToken);
+
+        return new AgentRuntimeConfigurationDto
+        {
+            AgentNodeName = agentNodeName.Trim(),
+            WorkshopCode = devices.Select(device => device.WorkshopCode).FirstOrDefault() ?? string.Empty,
+            Machines = devices.Select(device => new AgentMachineConfigurationDto
+            {
+                DeviceCode = device.DeviceCode,
+                IpAddress = device.IpAddress,
+                Port = device.Port,
+                Protocol = string.IsNullOrWhiteSpace(device.ProtocolName) ? "FOCAS over Ethernet" : device.ProtocolName,
+                TimeoutSeconds = 10,
+                ProcessingOperationModes = [3],
+                WaitingOperationModes = [1, 2],
+            }).ToArray(),
+            GeneratedAt = _timeProvider.GetLocalNow(),
         };
     }
 

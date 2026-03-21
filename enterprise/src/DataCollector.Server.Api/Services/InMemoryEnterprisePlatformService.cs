@@ -283,6 +283,19 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                 .ToArray());
     }
 
+    public Task<IReadOnlyList<FormulaVariableOptionDto>> GetFormulaVariableOptionsAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult<IReadOnlyList<FormulaVariableOptionDto>>(
+            _formulaEngine.GetSupportedVariableNames()
+                .Select(variableName => new FormulaVariableOptionDto
+                {
+                    VariableName = variableName,
+                    DisplayName = variableName,
+                })
+                .ToArray());
+    }
+
     public Task<FormulaDefinitionDto> UpdateFormulaAsync(string code, FormulaUpdateRequest request, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(code);
@@ -347,6 +360,38 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
             },
             SnapshotAt = now,
         });
+    }
+
+    public Task<AgentRuntimeConfigurationDto> GetAgentRuntimeConfigurationAsync(string agentNodeName, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentException.ThrowIfNullOrWhiteSpace(agentNodeName);
+
+        lock (_gate)
+        {
+            var devices = _devices
+                .Where(device => device.AgentNodeName.Equals(agentNodeName.Trim(), StringComparison.OrdinalIgnoreCase) && device.IsEnabled)
+                .OrderBy(device => device.DeviceCode, StringComparer.OrdinalIgnoreCase)
+                .Select(device => new AgentMachineConfigurationDto
+                {
+                    DeviceCode = device.DeviceCode,
+                    IpAddress = device.IpAddress,
+                    Port = device.Port,
+                    Protocol = string.IsNullOrWhiteSpace(device.ProtocolName) ? "FOCAS over Ethernet" : device.ProtocolName,
+                    TimeoutSeconds = 10,
+                    ProcessingOperationModes = [3],
+                    WaitingOperationModes = [1, 2],
+                })
+                .ToArray();
+
+            return Task.FromResult(new AgentRuntimeConfigurationDto
+            {
+                AgentNodeName = agentNodeName.Trim(),
+                WorkshopCode = _devices.FirstOrDefault(device => device.AgentNodeName.Equals(agentNodeName.Trim(), StringComparison.OrdinalIgnoreCase))?.WorkshopCode ?? string.Empty,
+                Machines = devices,
+                GeneratedAt = _timeProvider.GetLocalNow(),
+            });
+        }
     }
 
     public Task<SecurityOverviewDto> GetSecurityOverviewAsync(CancellationToken cancellationToken)

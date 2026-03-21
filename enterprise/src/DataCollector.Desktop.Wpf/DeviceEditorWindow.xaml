@@ -82,7 +82,11 @@
                         <TextBlock Margin="0,8,0,0"
                                    Foreground="{StaticResource TextSecondaryBrush}"
                                    Text="Agent 节点" />
-                        <TextBox x:Name="AgentNodeTextBox" Margin="0,8,0,0" />
+                        <ComboBox x:Name="AgentNodeComboBox"
+                                  Margin="0,8,0,0"
+                                  IsEditable="True"
+                                  IsTextSearchEnabled="False"
+                                  StaysOpenOnEdit="True" />
                     </StackPanel>
                 </Grid>
             </ScrollViewer>

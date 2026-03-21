@@ -34,33 +34,49 @@ New-Item -ItemType Directory -Force -Path $activeOutputRoot | Out-Null
 
 $publishTargets = @(
     @{
+        Name = "launcher"
+        Runtime = $Runtime
+        Project = Join-Path $enterpriseRoot "src\DataCollector.Launcher.Wpf\DataCollector.Launcher.Wpf.csproj"
+        Output = $activeOutputRoot
+        SingleFile = $true
+        ReadyToRun = $false
+    },
+    @{
         Name = "server"
         Runtime = $Runtime
         Project = Join-Path $enterpriseRoot "src\DataCollector.Server.Api\DataCollector.Server.Api.csproj"
+        Output = Join-Path $activeOutputRoot "server"
+        SingleFile = $false
+        ReadyToRun = $true
     },
     @{
         Name = "client"
         Runtime = $Runtime
         Project = Join-Path $enterpriseRoot "src\DataCollector.Desktop.Wpf\DataCollector.Desktop.Wpf.csproj"
+        Output = Join-Path $activeOutputRoot "client"
+        SingleFile = $false
+        ReadyToRun = $true
     },
     @{
         Name = "agent"
         Runtime = "win-x86"
         Project = Join-Path $enterpriseRoot "src\DataCollector.Agent.Worker\DataCollector.Agent.Worker.csproj"
+        Output = Join-Path $activeOutputRoot "agent"
+        SingleFile = $false
+        ReadyToRun = $true
     }
 )
 
 foreach ($target in $publishTargets) {
-    $targetOutput = Join-Path $activeOutputRoot $target.Name
     dotnet publish $target.Project `
         -c $Configuration `
         -r $target.Runtime `
         --self-contained true `
-        -p:PublishSingleFile=false `
-        -p:PublishReadyToRun=true `
+        -p:PublishSingleFile=$($target.SingleFile.ToString().ToLowerInvariant()) `
+        -p:PublishReadyToRun=$($target.ReadyToRun.ToString().ToLowerInvariant()) `
         -p:DebugSymbols=false `
         -p:DebugType=None `
-        -o $targetOutput
+        -o $target.Output
 }
 
 $serverBat = @"
@@ -105,7 +121,9 @@ DataCollector Enterprise Win10 Runtime Notes
    D:\source\dataCollector\enterprise\dist\$Runtime
 
 2. To view the enterprise UI, double-click:
-   Start-Enterprise-All.bat
+   DataCollectorLauncher.exe
+
+   If you still want the old batch-based way, Start-Enterprise-All.bat is also kept as a fallback.
 
 3. To run components separately:
    Start-EnterpriseServer.bat
@@ -125,18 +143,18 @@ DataCollector Enterprise Win10 Runtime Notes
 
 7. Agent setup basics:
    - Edit agent\appsettings.json
+   - ServerBaseUrl should point to the enterprise server, normally:
+     http://localhost:5180
    - AgentNodeName must match the device's Agent node in the client
-   - Machines[].DeviceCode must exactly match the device code in the client
-   - Machines[].IpAddress and Port must match the real CNC
-   - UploadEndpoint should normally be:
-     http://localhost:5180/api/ingestion/snapshots
+   - Machine lists are now pulled automatically from the server
+   - You no longer need to maintain Machines[] manually for normal usage
 
 8. If the CNC can be pinged but the enterprise client still shows offline, check:
-   - Start-EnterpriseAgent.bat was actually started
-   - agent\appsettings.json has the correct DeviceCode
+   - Start-EnterpriseAgent.bat or DataCollectorLauncher.exe was actually started
    - AgentNodeName matches the device archive
    - the device is enabled in the client
-   - the agent log reports no unknown/mismatch device codes
+   - the device really belongs to this Agent node
+   - the agent log reports no node mismatch or unknown device codes
 "@
 
 Set-Content -Path (Join-Path $activeOutputRoot "Start-EnterpriseServer.bat") -Value $serverBat -Encoding Ascii

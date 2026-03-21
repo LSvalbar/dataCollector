@@ -188,6 +188,7 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
@@ -220,19 +221,41 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-                                <TextBox x:Name="PowerOnFormulaTextBox" Height="64" TextWrapping="Wrap" AcceptsReturn="True" />
-                                <Button Grid.Row="1"
-                                        Width="150"
-                                        Margin="0,12,0,0"
-                                        HorizontalAlignment="Right"
-                                        Style="{StaticResource PrimaryButtonStyle}"
-                                        Content="保存开机率公式"
-                                        Click="SavePowerOnFormulaButton_Click" />
-                                <TextBlock Grid.Row="2"
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="52" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="分子" />
+                                    <ComboBox x:Name="PowerOnNumeratorComboBox"
+                                              Grid.Column="1"
+                                              DisplayMemberPath="DisplayName"
+                                              SelectedValuePath="VariableName"
+                                              IsEnabled="False" />
+                                </Grid>
+                                <Grid Grid.Row="1" Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="52" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="分母" />
+                                    <ComboBox x:Name="PowerOnDenominatorComboBox"
+                                              Grid.Column="1"
+                                              DisplayMemberPath="DisplayName"
+                                              SelectedValuePath="VariableName"
+                                              IsEnabled="False" />
+                                </Grid>
+                                <TextBlock x:Name="PowerOnFormulaPreviewTextBlock"
+                                           Grid.Row="2"
                                            Margin="0,12,0,0"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           Text="当前公式：-" />
+                                <TextBlock Grid.Row="2"
+                                           Margin="0,40,0,0"
                                            Foreground="{StaticResource TextSecondaryBrush}"
-                                           Text="可用列名：开机时间、加工时间、等待时间、待机时间、关机时间、报警时间、急停时间、通信中断时间、已观测时间、日历天时间" />
+                                           Text="当前开机率按分子 / 分母 * 100 自动计算。" />
                             </Grid>
                         </GroupBox>
 
@@ -242,24 +265,53 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-                                <TextBox x:Name="UtilizationFormulaTextBox" Height="64" TextWrapping="Wrap" AcceptsReturn="True" />
-                                <Button Grid.Row="1"
-                                        Width="150"
-                                        Margin="0,12,0,0"
-                                        HorizontalAlignment="Right"
-                                        Style="{StaticResource PrimaryButtonStyle}"
-                                        Content="保存利用率公式"
-                                        Click="SaveUtilizationFormulaButton_Click" />
-                                <TextBlock Grid.Row="2"
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="52" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="分子" />
+                                    <ComboBox x:Name="UtilizationNumeratorComboBox"
+                                              Grid.Column="1"
+                                              DisplayMemberPath="DisplayName"
+                                              SelectedValuePath="VariableName"
+                                              IsEnabled="False" />
+                                </Grid>
+                                <Grid Grid.Row="1" Margin="0,12,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="52" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="分母" />
+                                    <ComboBox x:Name="UtilizationDenominatorComboBox"
+                                              Grid.Column="1"
+                                              DisplayMemberPath="DisplayName"
+                                              SelectedValuePath="VariableName"
+                                              IsEnabled="False" />
+                                </Grid>
+                                <TextBlock x:Name="UtilizationFormulaPreviewTextBlock"
+                                           Grid.Row="2"
                                            Margin="0,12,0,0"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           Text="当前公式：-" />
+                                <TextBlock Grid.Row="2"
+                                           Margin="0,40,0,0"
                                            Foreground="{StaticResource TextSecondaryBrush}"
-                                           Text="输入示例：(加工时间 / 开机时间) * 100" />
+                                           Text="当前利用率按分子 / 分母 * 100 自动计算。" />
                             </Grid>
                         </GroupBox>
                     </Grid>
 
-                    <Border Grid.Row="2" Margin="0,18,0,0" Style="{StaticResource CardBorderStyle}">
+                    <StackPanel Grid.Row="2" Margin="0,12,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Width="130"
+                                Style="{StaticResource PrimaryButtonStyle}"
+                                Content="公式配置"
+                                Click="ConfigureFormulaButton_Click" />
+                    </StackPanel>
+
+                    <Border Grid.Row="3" Margin="0,18,0,0" Style="{StaticResource CardBorderStyle}">
                         <DataGrid x:Name="DailyReportGrid">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="车间" Binding="{Binding WorkshopName}" Width="110" />
@@ -453,7 +505,7 @@
                                     <TextBlock FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="{StaticResource TextPrimaryBrush}" Text="&#xE83A;" />
                                     <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="Bold" Text="Agent" />
                                     <TextBlock Margin="0,8,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                        Agent 放在车间采集机上，直接连接机床网络。它负责采集 FOCAS 数据，并按设备编码把实时快照上传到服务端；如果设备编码、Agent 节点或上传地址不一致，服务端不会认领这台机床。
+                                        Agent 放在车间采集机上，直接连接机床网络。它负责采集 FOCAS 数据，并按当前 Agent 节点自动从服务端拉取设备清单；设备增删改后，不需要再手工改本地 Machines 列表。
                                     </TextBlock>
                                 </StackPanel>
                             </Border>
@@ -472,10 +524,10 @@
                                     3. 在客户端录入部门、车间、设备、IP、端口和 Agent 节点，设备编码必须唯一。
                                 </TextBlock>
                                 <TextBlock Margin="0,10,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                    4. 编辑 Agent 的 appsettings.json，把 AgentNodeName、UploadEndpoint、Machines[].DeviceCode、Machines[].IpAddress、Machines[].Port 配成和设备档案一致。
+                                    4. 在 Win10 机器上优先使用统一启动器，填写服务端地址和 Agent 节点；Agent 会自动从服务端下发所属设备。
                                 </TextBlock>
                                 <TextBlock Margin="0,10,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                    5. 如果机床能 ping 通但客户端仍显示离线，优先检查 Agent 是否启动、DeviceCode 是否一致、Agent 节点是否一致、设备是否被禁用。
+                                    5. 如果机床能 ping 通但客户端仍显示离线，优先检查 Agent 是否启动、Agent 节点是否一致、设备是否真的绑定到了这个 Agent 节点、设备是否被禁用。
                                 </TextBlock>
                                 <TextBlock Margin="0,10,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
                                     6. 报表中的开机率、利用率公式由管理口径决定，可以在统计报表页直接维护。

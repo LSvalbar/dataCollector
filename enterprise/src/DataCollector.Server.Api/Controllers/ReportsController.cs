@@ -28,6 +28,12 @@ public sealed class ReportsController : ControllerBase
         return _platformService.GetFormulasAsync(cancellationToken);
     }
 
+    [HttpGet("formula-options")]
+    public Task<IReadOnlyList<FormulaVariableOptionDto>> GetFormulaOptions(CancellationToken cancellationToken)
+    {
+        return _platformService.GetFormulaVariableOptionsAsync(cancellationToken);
+    }
+
     [HttpPut("formulas/{code}")]
     public async Task<ActionResult<FormulaDefinitionDto>> UpdateFormula(string code, [FromBody] FormulaUpdateRequest request, CancellationToken cancellationToken)
     {

@@ -1,0 +1,54 @@
+<Window x:Class="DataCollector.Launcher.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="机加数采启动器"
+        Width="540"
+        Height="360"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock FontSize="24" FontWeight="Bold" Text="机加数采启动器" />
+        <TextBlock Grid.Row="1" Margin="0,8,0,0" Foreground="#666666" Text="统一启动服务端、客户端和 Agent，并保存本机节点配置。" />
+
+        <Grid Grid.Row="2" Margin="0,18,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="90" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <TextBlock VerticalAlignment="Center" Text="服务端地址" />
+            <TextBox x:Name="ServerBaseUrlTextBox" Grid.Column="1" Height="30" />
+
+            <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Agent节点" />
+            <TextBox x:Name="AgentNodeNameTextBox" Grid.Row="1" Grid.Column="1" Height="30" Margin="0,10,0,0" />
+
+            <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="发布目录" />
+            <TextBlock x:Name="RuntimeRootTextBlock" Grid.Row="2" Grid.Column="1" Margin="0,10,0,0" VerticalAlignment="Center" TextWrapping="Wrap" />
+
+            <UniformGrid Grid.Row="3" Grid.ColumnSpan="2" Margin="0,22,0,0" Rows="2" Columns="2">
+                <Button Margin="0,0,10,10" Padding="10,8" Content="启动服务端" Click="StartServerButton_Click" />
+                <Button Margin="0,0,0,10" Padding="10,8" Content="启动客户端" Click="StartClientButton_Click" />
+                <Button Margin="0,0,10,0" Padding="10,8" Content="启动Agent" Click="StartAgentButton_Click" />
+                <Button Margin="0,0,0,0" Padding="10,8" Content="全部启动" Click="StartAllButton_Click" />
+            </UniformGrid>
+        </Grid>
+
+        <StackPanel Grid.Row="3" Margin="0,18,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Width="100" Margin="0,0,8,0" Content="保存设置" Click="SaveButton_Click" />
+            <Button Width="100" Content="关闭" Click="CloseButton_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

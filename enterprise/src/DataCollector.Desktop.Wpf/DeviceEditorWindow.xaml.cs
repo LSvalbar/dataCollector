@@ -8,19 +8,27 @@ namespace DataCollector.Desktop.Wpf;
 
 public partial class DeviceEditorWindow : Window
 {
-    public DeviceEditorWindow(DeviceDto? device = null)
-        : this(device, null)
+    public DeviceEditorWindow(IEnumerable<string> agentNodeOptions, DeviceDto? device = null)
+        : this(agentNodeOptions, device, null)
     {
     }
 
-    public DeviceEditorWindow(DeviceUpsertRequest seedRequest)
-        : this(null, seedRequest)
+    public DeviceEditorWindow(IEnumerable<string> agentNodeOptions, DeviceUpsertRequest seedRequest)
+        : this(agentNodeOptions, null, seedRequest)
     {
     }
 
-    private DeviceEditorWindow(DeviceDto? device, DeviceUpsertRequest? seedRequest)
+    private DeviceEditorWindow(IEnumerable<string> agentNodeOptions, DeviceDto? device, DeviceUpsertRequest? seedRequest)
     {
         InitializeComponent();
+        var normalizedOptions = agentNodeOptions
+            .Where(option => !string.IsNullOrWhiteSpace(option))
+            .Select(option => option.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(option => option, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        AgentNodeComboBox.ItemsSource = normalizedOptions;
         DeviceId = device?.DeviceId;
         DepartmentCodeTextBox.Text = device?.DepartmentCode ?? seedRequest?.DepartmentCode ?? string.Empty;
         DepartmentNameTextBox.Text = device?.DepartmentName ?? seedRequest?.DepartmentName ?? string.Empty;
@@ -32,7 +40,7 @@ public partial class DeviceEditorWindow : Window
         ResponsiblePersonTextBox.Text = device?.ResponsiblePerson ?? seedRequest?.ResponsiblePerson ?? string.Empty;
         IpTextBox.Text = device?.IpAddress ?? seedRequest?.IpAddress ?? string.Empty;
         PortTextBox.Text = device?.Port.ToString() ?? seedRequest?.Port.ToString() ?? "8193";
-        AgentNodeTextBox.Text = device?.AgentNodeName ?? seedRequest?.AgentNodeName ?? string.Empty;
+        AgentNodeComboBox.Text = device?.AgentNodeName ?? seedRequest?.AgentNodeName ?? string.Empty;
         EnabledCheckBox.IsChecked = device?.IsEnabled ?? seedRequest?.IsEnabled ?? true;
     }
 
@@ -53,7 +61,7 @@ public partial class DeviceEditorWindow : Window
         var deviceCode = DeviceCodeTextBox.Text.Trim();
         var deviceName = DeviceNameTextBox.Text.Trim();
         var ipAddress = IpTextBox.Text.Trim();
-        var agentNodeName = AgentNodeTextBox.Text.Trim();
+        var agentNodeName = AgentNodeComboBox.Text.Trim();
 
         if (string.IsNullOrWhiteSpace(departmentName) ||
             string.IsNullOrWhiteSpace(workshopName) ||

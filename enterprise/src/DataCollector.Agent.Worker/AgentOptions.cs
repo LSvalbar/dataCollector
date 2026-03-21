@@ -2,19 +2,31 @@ namespace DataCollector.Agent.Worker;
 
 public sealed class AgentOptions
 {
+    public string ServerBaseUrl { get; set; } = "http://localhost:5180";
+
     public string AgentNodeName { get; set; } = "W01-Agent";
 
     public string WorkshopCode { get; set; } = "W01";
 
     public string LocalCachePath { get; set; } = "C:\\DataCollector\\AgentCache";
 
-    public string UploadEndpoint { get; set; } = "http://localhost:5180/api/ingestion/snapshots";
-
     public int PollIntervalMilliseconds { get; set; } = 1000;
 
     public int UploadIntervalSeconds { get; set; } = 5;
 
+    public int ConfigurationRefreshSeconds { get; set; } = 15;
+
     public List<MachineEndpointOptions> Machines { get; set; } = [];
+
+    public string GetUploadEndpoint()
+    {
+        return $"{ServerBaseUrl.TrimEnd('/')}/api/ingestion/snapshots";
+    }
+
+    public string GetRuntimeConfigurationEndpoint()
+    {
+        return $"{ServerBaseUrl.TrimEnd('/')}/api/agent/runtime-config/{Uri.EscapeDataString(AgentNodeName)}";
+    }
 }
 
 public sealed class MachineEndpointOptions

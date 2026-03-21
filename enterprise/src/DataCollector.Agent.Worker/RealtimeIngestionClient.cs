@@ -28,7 +28,7 @@ internal sealed class RealtimeIngestionClient
         }
 
         var response = await _httpClient.PostAsJsonAsync(
-            _options.UploadEndpoint,
+            _options.GetUploadEndpoint(),
             new MachineRealtimeBatchDto
             {
                 AgentNodeName = _options.AgentNodeName,

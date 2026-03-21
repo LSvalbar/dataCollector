@@ -1,0 +1,92 @@
+<Window x:Class="DataCollector.Desktop.Wpf.FormulaConfigWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="公式配置"
+        Width="560"
+        Height="420"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="16" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <GroupBox Header="开机率">
+                <Grid Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="60" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="分子" />
+                    <ComboBox x:Name="PowerOnNumeratorComboBox"
+                              Grid.Column="1"
+                              DisplayMemberPath="DisplayName"
+                              SelectedValuePath="VariableName" />
+                    <TextBlock Grid.Row="1" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="分母" />
+                    <ComboBox x:Name="PowerOnDenominatorComboBox"
+                              Grid.Row="1"
+                              Grid.Column="1"
+                              Margin="0,10,0,0"
+                              DisplayMemberPath="DisplayName"
+                              SelectedValuePath="VariableName" />
+                    <TextBlock x:Name="PowerOnPreviewTextBlock"
+                               Grid.Row="2"
+                               Grid.ColumnSpan="2"
+                               Margin="0,14,0,0"
+                               Foreground="{StaticResource TextPrimaryBrush}"
+                               Text="当前公式：-" />
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Grid.Row="2" Header="利用率">
+                <Grid Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="60" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="分子" />
+                    <ComboBox x:Name="UtilizationNumeratorComboBox"
+                              Grid.Column="1"
+                              DisplayMemberPath="DisplayName"
+                              SelectedValuePath="VariableName" />
+                    <TextBlock Grid.Row="1" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="分母" />
+                    <ComboBox x:Name="UtilizationDenominatorComboBox"
+                              Grid.Row="1"
+                              Grid.Column="1"
+                              Margin="0,10,0,0"
+                              DisplayMemberPath="DisplayName"
+                              SelectedValuePath="VariableName" />
+                    <TextBlock x:Name="UtilizationPreviewTextBlock"
+                               Grid.Row="2"
+                               Grid.ColumnSpan="2"
+                               Margin="0,14,0,0"
+                               Foreground="{StaticResource TextPrimaryBrush}"
+                               Text="当前公式：-" />
+                </Grid>
+            </GroupBox>
+        </Grid>
+
+        <StackPanel Grid.Row="1" Margin="0,18,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Width="100" Margin="0,0,8,0" Style="{StaticResource SecondaryButtonStyle}" Content="取消" Click="CancelButton_Click" />
+            <Button Width="100" Style="{StaticResource PrimaryButtonStyle}" Content="确定" Click="SaveButton_Click" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -16,6 +16,8 @@ internal sealed class FanucMachineSession : IDisposable
         _logger = logger;
     }
 
+    public MachineEndpointOptions Endpoint => _machine;
+
     public MachineRealtimeSnapshotDto Collect()
     {
         try

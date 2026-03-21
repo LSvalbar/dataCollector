@@ -5,6 +5,20 @@ namespace DataCollector.Core.Formula;
 
 public sealed class FormulaEngine
 {
+    private static readonly string[] SupportedVariableNames =
+    [
+        "开机时间",
+        "加工时间",
+        "等待时间",
+        "待机时间",
+        "关机时间",
+        "报警时间",
+        "急停时间",
+        "通信中断时间",
+        "已观测时间",
+        "日历天时间",
+    ];
+
     private static readonly Dictionary<char, int> OperatorPrecedence = new()
     {
         ['+'] = 1,
@@ -73,6 +87,11 @@ public sealed class FormulaEngine
             ["已观测时间"] = metrics.ObservedMinutes,
             ["日历天时间"] = 1440d,
         };
+    }
+
+    public IReadOnlyList<string> GetSupportedVariableNames()
+    {
+        return SupportedVariableNames;
     }
 
     private static IEnumerable<string> ToReversePolishNotation(string expression)

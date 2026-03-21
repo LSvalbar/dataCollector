@@ -24,6 +24,9 @@ public partial class MainWindow : Window
     private Guid? _deviceGridContextDeviceId;
     private string? _userGridContextCode;
     private string? _roleGridContextCode;
+    private List<FormulaVariableOptionDto> _formulaOptions = [];
+    private FormulaSelection _powerOnFormulaSelection = new("开机时间", "已观测时间");
+    private FormulaSelection _utilizationFormulaSelection = new("加工时间", "开机时间");
 
     public MainWindow()
     {
@@ -154,10 +157,14 @@ public partial class MainWindow : Window
                 return;
             }
 
+            _formulaOptions = (await _apiClient.GetFormulaOptionsAsync() ?? [])
+                .OrderBy(option => option.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
             var powerOnFormula = response.Formulas.FirstOrDefault(formula => formula.Code == "power_on_rate");
             var utilizationFormula = response.Formulas.FirstOrDefault(formula => formula.Code == "utilization_rate");
-            PowerOnFormulaTextBox.Text = powerOnFormula?.Expression ?? string.Empty;
-            UtilizationFormulaTextBox.Text = utilizationFormula?.Expression ?? string.Empty;
+            _powerOnFormulaSelection = ParseFormulaSelection(powerOnFormula?.Expression, "开机时间", "已观测时间");
+            _utilizationFormulaSelection = ParseFormulaSelection(utilizationFormula?.Expression, "加工时间", "开机时间");
+            BindFormulaSelections();
             ReportSummaryTextBlock.Text = $"日报快照：{response.SnapshotAt:yyyy-MM-dd HH:mm:ss}";
             DailyReportGrid.ItemsSource = response.Rows.Select(ToReportGridRow).ToList();
         }
@@ -523,6 +530,55 @@ public partial class MainWindow : Window
         }
     }
 
+    private void BindFormulaSelections()
+    {
+        PowerOnNumeratorComboBox.ItemsSource = _formulaOptions;
+        PowerOnDenominatorComboBox.ItemsSource = _formulaOptions;
+        UtilizationNumeratorComboBox.ItemsSource = _formulaOptions;
+        UtilizationDenominatorComboBox.ItemsSource = _formulaOptions;
+
+        PowerOnNumeratorComboBox.SelectedValue = _powerOnFormulaSelection.Numerator;
+        PowerOnDenominatorComboBox.SelectedValue = _powerOnFormulaSelection.Denominator;
+        UtilizationNumeratorComboBox.SelectedValue = _utilizationFormulaSelection.Numerator;
+        UtilizationDenominatorComboBox.SelectedValue = _utilizationFormulaSelection.Denominator;
+
+        PowerOnFormulaPreviewTextBlock.Text = $"当前公式：{BuildFormulaExpression(_powerOnFormulaSelection)}";
+        UtilizationFormulaPreviewTextBlock.Text = $"当前公式：{BuildFormulaExpression(_utilizationFormulaSelection)}";
+    }
+
+    private static FormulaSelection ParseFormulaSelection(string? expression, string defaultNumerator, string defaultDenominator)
+    {
+        if (string.IsNullOrWhiteSpace(expression))
+        {
+            return new FormulaSelection(defaultNumerator, defaultDenominator);
+        }
+
+        var normalized = expression.Replace(" ", string.Empty, StringComparison.Ordinal);
+        if (!normalized.EndsWith("*100", StringComparison.Ordinal))
+        {
+            return new FormulaSelection(defaultNumerator, defaultDenominator);
+        }
+
+        var ratio = normalized[..^4];
+        if (ratio.StartsWith("(") && ratio.EndsWith(")"))
+        {
+            ratio = ratio[1..^1];
+        }
+
+        var parts = ratio.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length != 2)
+        {
+            return new FormulaSelection(defaultNumerator, defaultDenominator);
+        }
+
+        return new FormulaSelection(parts[0], parts[1]);
+    }
+
+    private static string BuildFormulaExpression(FormulaSelection selection)
+    {
+        return $"({selection.Numerator} / {selection.Denominator}) * 100";
+    }
+
     private void UpdateServerStatus(bool online)
     {
         ServerStatusTextBlock.Text = online ? "服务状态：在线" : "服务状态：离线";
@@ -531,7 +587,7 @@ public partial class MainWindow : Window
 
     private async Task OpenAddDeviceDialogAsync()
     {
-        var window = new DeviceEditorWindow(BuildDefaultRequest()) { Owner = this };
+        var window = new DeviceEditorWindow(GetAgentNodeOptions(), BuildDefaultRequest()) { Owner = this };
         if (window.ShowDialog() != true || window.Request is null)
         {
             return;
@@ -678,6 +734,16 @@ public partial class MainWindow : Window
         }
 
         return request;
+    }
+
+    private IReadOnlyList<string> GetAgentNodeOptions()
+    {
+        return _devices
+            .Select(device => device.AgentNodeName)
+            .Where(agentNode => !string.IsNullOrWhiteSpace(agentNode))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(agentNode => agentNode, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static T? FindAncestor<T>(DependencyObject? source) where T : DependencyObject
@@ -937,9 +1003,47 @@ public partial class MainWindow : Window
 
     private async void RefreshTimelineButton_Click(object sender, RoutedEventArgs e) => await RefreshTimelineAsync(true);
 
-    private async void SavePowerOnFormulaButton_Click(object sender, RoutedEventArgs e) => await SaveFormulaAsync("power_on_rate", PowerOnFormulaTextBox.Text);
+    private async void ConfigureFormulaButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_formulaOptions.Count == 0)
+        {
+            MessageBox.Show(this, "当前没有可用公式列，请先确认服务端和报表接口正常。", "无法配置公式", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
 
-    private async void SaveUtilizationFormulaButton_Click(object sender, RoutedEventArgs e) => await SaveFormulaAsync("utilization_rate", UtilizationFormulaTextBox.Text);
+        var window = new FormulaConfigWindow(_formulaOptions, _powerOnFormulaSelection, _utilizationFormulaSelection) { Owner = this };
+        if (window.ShowDialog() != true || window.PowerOnSelection is null || window.UtilizationSelection is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _apiClient.UpdateFormulaAsync(
+                "power_on_rate",
+                new FormulaUpdateRequest
+                {
+                    Expression = BuildFormulaExpression(window.PowerOnSelection),
+                    UpdatedBy = Environment.UserName,
+                });
+            await _apiClient.UpdateFormulaAsync(
+                "utilization_rate",
+                new FormulaUpdateRequest
+                {
+                    Expression = BuildFormulaExpression(window.UtilizationSelection),
+                    UpdatedBy = Environment.UserName,
+                });
+
+            _powerOnFormulaSelection = window.PowerOnSelection;
+            _utilizationFormulaSelection = window.UtilizationSelection;
+            await RefreshReportAsync(true);
+            MessageBox.Show(this, "公式配置已更新。", "保存成功", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "保存公式失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
 
     private async void AddDeviceButton_Click(object sender, RoutedEventArgs e)
     {
@@ -955,7 +1059,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new DeviceEditorWindow(device) { Owner = this };
+        var window = new DeviceEditorWindow(GetAgentNodeOptions(), device) { Owner = this };
         if (window.ShowDialog() != true || window.Request is null)
         {
             return;

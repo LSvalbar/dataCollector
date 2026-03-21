@@ -50,6 +50,11 @@ public sealed class EnterpriseApiClient : IDisposable
         return _httpClient.GetFromJsonAsync<IReadOnlyList<FormulaDefinitionDto>>("/api/reports/formulas", cancellationToken);
     }
 
+    public Task<IReadOnlyList<FormulaVariableOptionDto>?> GetFormulaOptionsAsync(CancellationToken cancellationToken = default)
+    {
+        return _httpClient.GetFromJsonAsync<IReadOnlyList<FormulaVariableOptionDto>>("/api/reports/formula-options", cancellationToken);
+    }
+
     public async Task<FormulaDefinitionDto?> UpdateFormulaAsync(string code, FormulaUpdateRequest request, CancellationToken cancellationToken = default)
     {
         using var response = await _httpClient.PutAsJsonAsync($"/api/reports/formulas/{code}", request, cancellationToken);
