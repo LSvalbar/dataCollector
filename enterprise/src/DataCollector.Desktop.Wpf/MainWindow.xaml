@@ -32,12 +32,17 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid Margin="20,18,20,0">
+        <Grid Margin="20,22,20,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="机加数采客户端" />
+            <TextBlock Margin="0,8,0,0"
+                       VerticalAlignment="Center"
+                       FontSize="30"
+                       FontWeight="Bold"
+                       Foreground="{StaticResource TextPrimaryBrush}"
+                       Text="机加数采客户端" />
             <StackPanel Grid.Column="1" HorizontalAlignment="Right">
                 <TextBlock x:Name="ServerStatusTextBlock"
                            HorizontalAlignment="Right"
@@ -59,7 +64,7 @@
             </StackPanel>
         </Grid>
 
-        <TabControl x:Name="MainTabControl" Grid.Row="1" Margin="20,18,20,20">
+        <TabControl x:Name="MainTabControl" Grid.Row="1" Margin="20,10,20,20">
             <TabItem x:Name="DeviceManagementTab" Header="设备管理">
                 <Grid Margin="0,14,0,0">
                     <Grid.ColumnDefinitions>
@@ -101,10 +106,6 @@
                         </Grid.RowDefinitions>
 
                         <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
                             <StackPanel>
                                 <TextBlock x:Name="ScopeSummaryTextBlock"
                                            FontSize="18"
@@ -115,11 +116,6 @@
                                            Margin="0,6,0,0"
                                            Foreground="{StaticResource TextSecondaryBrush}"
                                            Text="正在加载设备概览..." />
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-                                <Button Width="108" Margin="0,0,8,0" Style="{StaticResource SecondaryButtonStyle}" Content="编辑设备" Click="EditDeviceButton_Click" />
-                                <Button Width="108" Margin="0,0,8,0" Style="{StaticResource DangerButtonStyle}" Content="删除设备" Click="DeleteDeviceButton_Click" />
-                                <Button Width="108" Style="{StaticResource PrimaryButtonStyle}" Content="刷新设备" Click="RefreshOverviewButton_Click" />
                             </StackPanel>
                         </Grid>
 
