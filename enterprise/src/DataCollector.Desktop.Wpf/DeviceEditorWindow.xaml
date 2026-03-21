@@ -13,20 +13,20 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border Style="{StaticResource CardBorderStyle}" Padding="22" Background="{StaticResource HeroBackgroundBrush}">
+        <Border Style="{StaticResource CardBorderStyle}" Padding="18">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <TextBlock FontFamily="Segoe Fluent Icons"
-                           FontSize="24"
-                           Foreground="White"
+                           FontSize="20"
+                           Foreground="{StaticResource TextPrimaryBrush}"
                            Text="&#xE8F1;" />
-                <StackPanel Grid.Column="1" Margin="14,0,0,0">
-                    <TextBlock FontSize="22" FontWeight="Bold" Foreground="White" Text="设备档案维护" />
+                <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                    <TextBlock FontSize="20" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="设备档案维护" />
                     <TextBlock Margin="0,6,0,0"
-                               Foreground="#DCE9FF"
+                               Foreground="{StaticResource TextSecondaryBrush}"
                                Text="维护部门、车间、设备编码、网络地址和 Agent 归属。" />
                 </StackPanel>
             </Grid>

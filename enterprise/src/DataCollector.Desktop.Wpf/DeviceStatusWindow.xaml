@@ -13,43 +13,43 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Border Style="{StaticResource CardBorderStyle}" Padding="22" Background="{StaticResource HeroBackgroundBrush}">
+        <Border Style="{StaticResource CardBorderStyle}" Padding="18">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <TextBlock x:Name="DeviceTitleTextBlock" FontSize="24" FontWeight="Bold" Foreground="White" Text="设备详情" />
-                    <TextBlock x:Name="DeviceSubtitleTextBlock" Margin="0,8,0,0" Foreground="#DCE9FF" Text="当前设备的主要运行参数与实时状态。" />
+                    <TextBlock x:Name="DeviceTitleTextBlock" FontSize="22" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="设备详情" />
+                    <TextBlock x:Name="DeviceSubtitleTextBlock" Margin="0,8,0,0" Foreground="{StaticResource TextSecondaryBrush}" Text="当前设备的主要运行参数与实时状态。" />
                 </StackPanel>
                 <StackPanel Grid.Column="1">
-                    <TextBlock x:Name="LastUpdatedTextBlock" HorizontalAlignment="Right" Foreground="#DCE9FF" Text="最近更新：-" />
-                    <TextBlock x:Name="DataQualityTextBlock" Margin="0,8,0,0" HorizontalAlignment="Right" Foreground="#DCE9FF" Text="数据质量：-" />
+                    <TextBlock x:Name="LastUpdatedTextBlock" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" Text="最近更新：-" />
+                    <TextBlock x:Name="DataQualityTextBlock" Margin="0,8,0,0" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" Text="数据质量：-" />
                 </StackPanel>
             </Grid>
         </Border>
 
         <WrapPanel Grid.Row="1" Margin="0,18,0,10">
-            <Border x:Name="CurrentStateBorder" Width="180" Margin="0,0,12,12" Padding="14" CornerRadius="16">
+            <Border x:Name="CurrentStateBorder" Width="180" Margin="0,0,12,12" Padding="14" BorderBrush="#C8C6C4" BorderThickness="1">
                 <StackPanel>
                     <TextBlock Foreground="{StaticResource TextSecondaryBrush}" Text="当前状态" />
                     <TextBlock x:Name="CurrentStateTextBlock" Margin="0,8,0,0" FontSize="22" FontWeight="Bold" />
                 </StackPanel>
             </Border>
-            <Border x:Name="OnlineStateBorder" Width="180" Margin="0,0,12,12" Padding="14" CornerRadius="16">
+            <Border x:Name="OnlineStateBorder" Width="180" Margin="0,0,12,12" Padding="14" BorderBrush="#C8C6C4" BorderThickness="1">
                 <StackPanel>
                     <TextBlock Foreground="{StaticResource TextSecondaryBrush}" Text="在线状态" />
                     <TextBlock x:Name="OnlineStateTextBlock" Margin="0,8,0,0" FontSize="22" FontWeight="Bold" />
                 </StackPanel>
             </Border>
-            <Border x:Name="HealthStateBorder" Width="180" Margin="0,0,12,12" Padding="14" CornerRadius="16">
+            <Border x:Name="HealthStateBorder" Width="180" Margin="0,0,12,12" Padding="14" BorderBrush="#C8C6C4" BorderThickness="1">
                 <StackPanel>
                     <TextBlock Foreground="{StaticResource TextSecondaryBrush}" Text="设备健康" />
                     <TextBlock x:Name="HealthStateTextBlock" Margin="0,8,0,0" FontSize="22" FontWeight="Bold" />
                 </StackPanel>
             </Border>
-            <Border x:Name="ProgramStateBorder" Width="220" Margin="0,0,12,12" Padding="14" CornerRadius="16" Background="{StaticResource AccentSoftBrush}">
+            <Border x:Name="ProgramStateBorder" Width="220" Margin="0,0,12,12" Padding="14" BorderBrush="#C8C6C4" BorderThickness="1" Background="White">
                 <StackPanel>
                     <TextBlock Foreground="{StaticResource TextSecondaryBrush}" Text="当前程序" />
                     <TextBlock x:Name="ProgramTextBlock" Margin="0,8,0,0" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="-" />
@@ -68,11 +68,10 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Border Margin="0,0,12,12"
-                                    Padding="14"
-                                    Background="#F8FBFF"
+                                    Padding="10"
+                                    Background="White"
                                     BorderBrush="{StaticResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="16">
+                                    BorderThickness="1">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="120" />
@@ -84,7 +83,8 @@
                                     <Border Grid.Column="1"
                                             Padding="10,8"
                                             Background="{Binding ValueBackground}"
-                                            CornerRadius="12">
+                                            BorderBrush="#C8C6C4"
+                                            BorderThickness="1">
                                         <TextBlock Foreground="{Binding ValueForeground}"
                                                    FontWeight="SemiBold"
                                                    Text="{Binding Value}"

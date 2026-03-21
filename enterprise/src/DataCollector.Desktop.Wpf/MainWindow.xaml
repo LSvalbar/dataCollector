@@ -12,28 +12,17 @@
         MinHeight="860">
     <Window.Resources>
         <HierarchicalDataTemplate DataType="{x:Type local:OrganizationTreeNode}" ItemsSource="{Binding Children}">
-            <Grid Margin="0,2,0,2">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Border Width="28"
-                        Height="28"
-                        VerticalAlignment="Top"
-                        Background="{Binding AccentBackground}"
-                        CornerRadius="10">
-                    <TextBlock HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               FontFamily="Segoe Fluent Icons"
-                               FontSize="14"
-                               Foreground="{Binding AccentForeground}"
-                               Text="{Binding Glyph}" />
-                </Border>
-                <StackPanel Grid.Column="1" Margin="10,0,0,0">
+            <StackPanel Orientation="Horizontal" Margin="0,1,0,1">
+                <TextBlock VerticalAlignment="Center"
+                           FontFamily="Segoe Fluent Icons"
+                           FontSize="13"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           Text="{Binding Glyph}" />
+                <StackPanel Margin="8,0,0,0">
                     <TextBlock FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Text="{Binding Title}" />
                     <TextBlock Margin="0,3,0,0" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" Text="{Binding Subtitle}" />
                 </StackPanel>
-            </Grid>
+            </StackPanel>
         </HierarchicalDataTemplate>
     </Window.Resources>
 
@@ -43,32 +32,32 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Border Margin="20,18,20,0" Padding="28,22" Style="{StaticResource CardBorderStyle}" Background="{StaticResource HeroBackgroundBrush}">
+        <Border Margin="20,18,20,0" Padding="24,18" Style="{StaticResource CardBorderStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <TextBlock FontSize="28" FontWeight="Bold" Foreground="White" Text="企业级 CNC 采集平台" />
+                    <TextBlock FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="企业级 CNC 采集平台" />
                     <TextBlock Margin="0,8,0,0"
-                               Foreground="#D7E6FF"
+                               Foreground="{StaticResource TextSecondaryBrush}"
                                Text="设备管理、实时状态、日报统计、时间追溯与权限治理统一在一个客户端完成。" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" HorizontalAlignment="Right">
                     <TextBlock x:Name="ServerStatusTextBlock"
                                HorizontalAlignment="Right"
-                               Foreground="#BBF7D0"
+                               Foreground="{StaticResource TextPrimaryBrush}"
                                Text="服务状态：检测中" />
                     <TextBlock x:Name="ApiBaseUrlTextBlock"
                                Margin="0,6,0,0"
                                HorizontalAlignment="Right"
-                               Foreground="#D7E6FF"
+                               Foreground="{StaticResource TextSecondaryBrush}"
                                Text="API：" />
                     <TextBlock x:Name="LastOverviewRefreshTextBlock"
                                Margin="0,6,0,0"
                                HorizontalAlignment="Right"
-                               Foreground="#D7E6FF"
+                               Foreground="{StaticResource TextSecondaryBrush}"
                                Text="最近刷新：-" />
                     <StackPanel Margin="0,14,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button Width="120" Margin="0,0,10,0" Style="{StaticResource SecondaryButtonStyle}" Content="刷新全部" Click="RefreshAllButton_Click" />
@@ -97,7 +86,7 @@
                                 <TextBlock FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="组织视图" />
                                 <TextBlock Margin="0,6,0,0"
                                            Foreground="{StaticResource TextSecondaryBrush}"
-                                           Text="按部门、车间、机床逐级查看。双击机床可直接弹出实时运行详情。" />
+                                           Text="按部门、车间、机床逐级查看。点击 + 号展开，双击机床打开详情。" />
                             </StackPanel>
                             <TreeView x:Name="DeviceTreeView"
                                       Grid.Row="1"
@@ -152,7 +141,7 @@
                                     <DataGridTemplateColumn Header="在线" Width="84">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <Border Padding="8,4" Background="{Binding OnlineBackground}" CornerRadius="10">
+                                                <Border Padding="8,4" Background="{Binding OnlineBackground}" BorderBrush="#C8C6C4" BorderThickness="1">
                                                     <TextBlock HorizontalAlignment="Center" Foreground="{Binding OnlineForeground}" Text="{Binding MachineOnlineText}" />
                                                 </Border>
                                             </DataTemplate>
@@ -161,7 +150,7 @@
                                     <DataGridTemplateColumn Header="当前状态" Width="92">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <Border Padding="8,4" Background="{Binding StateBackground}" CornerRadius="10">
+                                                <Border Padding="8,4" Background="{Binding StateBackground}" BorderBrush="#C8C6C4" BorderThickness="1">
                                                     <TextBlock HorizontalAlignment="Center" Foreground="{Binding StateForeground}" Text="{Binding StateText}" />
                                                 </Border>
                                             </DataTemplate>
@@ -170,7 +159,7 @@
                                     <DataGridTemplateColumn Header="健康" Width="92">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <Border Padding="8,4" Background="{Binding HealthBackground}" CornerRadius="10">
+                                                <Border Padding="8,4" Background="{Binding HealthBackground}" BorderBrush="#C8C6C4" BorderThickness="1">
                                                     <TextBlock HorizontalAlignment="Center" Foreground="{Binding HealthForeground}" Text="{Binding HealthText}" />
                                                 </Border>
                                             </DataTemplate>
@@ -306,7 +295,7 @@
                                 <DataGridTemplateColumn Header="状态" Width="110">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
-                                            <Border Padding="8,4" Background="{Binding StateBackground}" CornerRadius="10">
+                                            <Border Padding="8,4" Background="{Binding StateBackground}" BorderBrush="#C8C6C4" BorderThickness="1">
                                                 <TextBlock HorizontalAlignment="Center" Foreground="{Binding StateForeground}" Text="{Binding StateText}" />
                                             </Border>
                                         </DataTemplate>
@@ -406,7 +395,7 @@
                         <StackPanel>
                             <Border Style="{StaticResource CardBorderStyle}" Margin="0,0,0,16">
                                 <StackPanel>
-                                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="24" Foreground="{StaticResource AccentBrush}" Text="&#xE7F4;" />
+                                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="{StaticResource TextPrimaryBrush}" Text="&#xE7F4;" />
                                     <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="Bold" Text="客户端" />
                                     <TextBlock Margin="0,8,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
                                         客户端是给管理者、IT 运维和主管使用的操作界面。主要负责设备管理、报表查看、历史追溯、权限管理和公式配置。
@@ -416,7 +405,7 @@
 
                             <Border Style="{StaticResource CardBorderStyle}" Margin="0,0,0,16">
                                 <StackPanel>
-                                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="24" Foreground="{StaticResource AccentBrush}" Text="&#xE7EE;" />
+                                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="{StaticResource TextPrimaryBrush}" Text="&#xE7EE;" />
                                     <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="Bold" Text="服务端" />
                                     <TextBlock Margin="0,8,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
                                         服务端放在机房或中心服务器，负责统一接收 Agent 上传的数据，保存设备档案、公式、时间线、权限和报表结果，并向客户端提供 API。
@@ -426,7 +415,7 @@
 
                             <Border Style="{StaticResource CardBorderStyle}">
                                 <StackPanel>
-                                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="24" Foreground="{StaticResource AccentBrush}" Text="&#xE83A;" />
+                                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="{StaticResource TextPrimaryBrush}" Text="&#xE83A;" />
                                     <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="Bold" Text="Agent" />
                                     <TextBlock Margin="0,8,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
                                         Agent 放在车间采集机上，直接连接机床网络。它负责采集 FOCAS 数据、本地缓存、断线重连、补传和心跳上报。
@@ -453,14 +442,6 @@
                                 <TextBlock Margin="0,10,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
                                     5. 报表中的开机率、利用率公式由管理口径决定，可以在统计报表页直接维护。
                                 </TextBlock>
-                                <Border Margin="0,20,0,0"
-                                        Padding="14"
-                                        Background="{StaticResource AccentSoftBrush}"
-                                        CornerRadius="14">
-                                    <TextBlock Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap">
-                                        当前这一版已经具备正式版的界面骨架和实时状态入口。后续上线时，Agent 负责采集，服务端负责汇总，客户端负责展示和管理。
-                                    </TextBlock>
-                                </Border>
                             </StackPanel>
                         </Border>
                     </Grid>

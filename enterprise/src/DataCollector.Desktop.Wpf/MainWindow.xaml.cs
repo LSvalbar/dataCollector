@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 using DataCollector.Contracts;
 using DataCollector.Desktop.Wpf.Services;
@@ -263,8 +264,8 @@ public partial class MainWindow : Window
                 Title = departmentGroup.Key.DepartmentName,
                 Subtitle = $"{departmentGroup.Count()} 台机床",
                 Glyph = "\uE80F",
-                AccentBackground = CreateBrush("#DBEAFE"),
-                AccentForeground = CreateBrush("#1D4ED8"),
+                AccentBackground = Brushes.Transparent,
+                AccentForeground = Brushes.Transparent,
                 Children = departmentGroup
                     .GroupBy(device => new { device.WorkshopCode, device.WorkshopName })
                     .OrderBy(group => group.Key.WorkshopCode)
@@ -275,8 +276,8 @@ public partial class MainWindow : Window
                         Title = workshopGroup.Key.WorkshopName,
                         Subtitle = $"{workshopGroup.Count()} 台机床",
                         Glyph = "\uE7F1",
-                        AccentBackground = CreateBrush("#E0F2FE"),
-                        AccentForeground = CreateBrush("#0369A1"),
+                        AccentBackground = Brushes.Transparent,
+                        AccentForeground = Brushes.Transparent,
                         Children = workshopGroup
                             .OrderBy(device => device.DeviceCode)
                             .Select(device => new OrganizationTreeNode
@@ -284,11 +285,11 @@ public partial class MainWindow : Window
                                 NodeType = ScopeNodeType.Device,
                                 ScopeKey = device.DeviceId.ToString(),
                                 DeviceId = device.DeviceId,
-                                Title = $"{device.DeviceCode} · {device.DeviceName}",
+                                Title = $"{device.DeviceCode} - {device.DeviceName}",
                                 Subtitle = $"{device.ControllerModel} | {device.IpAddress}:{device.Port}",
                                 Glyph = "\uE9CE",
-                                AccentBackground = CreateBrush("#E2E8F0"),
-                                AccentForeground = CreateBrush("#334155"),
+                                AccentBackground = Brushes.Transparent,
+                                AccentForeground = Brushes.Transparent,
                             })
                             .ToList(),
                     })
@@ -320,12 +321,12 @@ public partial class MainWindow : Window
 
         var cards = new[]
         {
-            CreateMetricCard("设备总数", devices.Count.ToString(), "当前筛选范围", "#DBEAFE", "#1D4ED8"),
-            CreateMetricCard("加工中", devices.Count(device => device.CurrentState == MachineOperationalState.Processing).ToString(), "绿灯 = 正在加工", "#DCFCE7", "#15803D"),
-            CreateMetricCard("等待中", devices.Count(device => device.CurrentState == MachineOperationalState.Waiting).ToString(), "黄灯 = 等待/暂停", "#FEF3C7", "#B45309"),
-            CreateMetricCard("待机", devices.Count(device => device.CurrentState == MachineOperationalState.Standby).ToString(), "黄灯 = 已开机待命", "#FEF3C7", "#92400E"),
-            CreateMetricCard("关机", devices.Count(device => device.CurrentState == MachineOperationalState.PowerOff).ToString(), "灰灯 = 已关机", "#E2E8F0", "#475569"),
-            CreateMetricCard("异常", devices.Count(device => device.CurrentState is MachineOperationalState.Alarm or MachineOperationalState.Emergency or MachineOperationalState.CommunicationInterrupted).ToString(), "报警/急停/断连", "#FEE2E2", "#B91C1C"),
+            CreateMetricCard("设备总数", devices.Count.ToString(), "当前范围"),
+            CreateMetricCard("加工中", devices.Count(device => device.CurrentState == MachineOperationalState.Processing).ToString(), "绿色"),
+            CreateMetricCard("等待中", devices.Count(device => device.CurrentState == MachineOperationalState.Waiting).ToString(), "黄色"),
+            CreateMetricCard("待机", devices.Count(device => device.CurrentState == MachineOperationalState.Standby).ToString(), "黄色"),
+            CreateMetricCard("关机", devices.Count(device => device.CurrentState == MachineOperationalState.PowerOff).ToString(), "灰色"),
+            CreateMetricCard("异常", devices.Count(device => device.CurrentState is MachineOperationalState.Alarm or MachineOperationalState.Emergency or MachineOperationalState.CommunicationInterrupted).ToString(), "红色"),
         };
 
         foreach (var card in cards)
@@ -334,46 +335,68 @@ public partial class MainWindow : Window
         }
     }
 
-    private Border CreateMetricCard(string title, string value, string hint, string background, string foreground)
+    private Border CreateMetricCard(string title, string value, string hint)
     {
         var border = new Border
         {
             Width = 188,
             Margin = new Thickness(0, 0, 12, 12),
-            Padding = new Thickness(16),
-            Background = CreateBrush(background),
-            CornerRadius = new CornerRadius(16),
+            Padding = new Thickness(14),
+            Background = _whiteBrush,
+            BorderBrush = CreateBrush("#C8C6C4"),
+            BorderThickness = new Thickness(1),
         };
 
-        border.Child = new StackPanel
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var indicator = new Rectangle
         {
+            Width = 8,
+            Fill = title switch
+            {
+                "加工中" => CreateBrush("#107C10"),
+                "等待中" or "待机" => CreateBrush("#986F0B"),
+                "关机" => CreateBrush("#605E5C"),
+                "异常" => CreateBrush("#D13438"),
+                _ => CreateBrush("#0078D4"),
+            },
+        };
+        Grid.SetColumn(indicator, 0);
+        grid.Children.Add(indicator);
+
+        var stack = new StackPanel
+        {
+            Margin = new Thickness(12, 0, 0, 0),
             Children =
             {
                 new TextBlock
                 {
                     Text = title,
-                    Foreground = CreateBrush(foreground),
+                    Foreground = CreateBrush("#605E5C"),
                     FontWeight = FontWeights.SemiBold,
                 },
                 new TextBlock
                 {
-                    Margin = new Thickness(0, 10, 0, 0),
+                    Margin = new Thickness(0, 8, 0, 0),
                     Text = value,
-                    Foreground = CreateBrush(foreground),
-                    FontSize = 28,
+                    Foreground = CreateBrush("#201F1E"),
+                    FontSize = 24,
                     FontWeight = FontWeights.Bold,
                 },
                 new TextBlock
                 {
-                    Margin = new Thickness(0, 8, 0, 0),
+                    Margin = new Thickness(0, 6, 0, 0),
                     Text = hint,
-                    Foreground = CreateBrush(foreground),
-                    Opacity = 0.85,
-                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = CreateBrush("#605E5C"),
                 },
             },
         };
+        Grid.SetColumn(stack, 1);
+        grid.Children.Add(stack);
 
+        border.Child = grid;
         return border;
     }
 
@@ -386,11 +409,10 @@ public partial class MainWindow : Window
             {
                 Width = 190,
                 Margin = new Thickness(0, 0, 12, 12),
-                Padding = new Thickness(14),
+                Padding = new Thickness(12),
                 Background = _whiteBrush,
-                BorderBrush = CreateBrush("#D8E2F0"),
+                BorderBrush = CreateBrush("#C8C6C4"),
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(16),
             };
 
             border.Child = new StackPanel
@@ -400,7 +422,7 @@ public partial class MainWindow : Window
                     new TextBlock
                     {
                         Text = total.Key,
-                        Foreground = CreateBrush("#475569"),
+                        Foreground = CreateBrush("#605E5C"),
                         FontWeight = FontWeights.SemiBold,
                     },
                     new TextBlock
@@ -409,7 +431,7 @@ public partial class MainWindow : Window
                         Text = $"{total.Value:F2} 分钟",
                         FontSize = 20,
                         FontWeight = FontWeights.Bold,
-                        Foreground = CreateBrush("#0F172A"),
+                        Foreground = CreateBrush("#201F1E"),
                     },
                 },
             };
@@ -497,7 +519,7 @@ public partial class MainWindow : Window
     private void UpdateServerStatus(bool online)
     {
         ServerStatusTextBlock.Text = online ? "服务状态：在线" : "服务状态：离线";
-        ServerStatusTextBlock.Foreground = online ? CreateBrush("#BBF7D0") : Brushes.OrangeRed;
+        ServerStatusTextBlock.Foreground = online ? CreateBrush("#107C10") : CreateBrush("#D13438");
     }
 
     private DeviceDto? GetSelectedDevice()
@@ -536,7 +558,7 @@ public partial class MainWindow : Window
     {
         var stateBackground = GetStateBackground(device.CurrentState);
         var healthBackground = GetHealthBackground(device.HealthLevel);
-        var onlineBackground = device.MachineOnline ? CreateBrush("#DCFCE7") : CreateBrush("#E2E8F0");
+        var onlineBackground = device.MachineOnline ? CreateBrush("#DFF6DD") : CreateBrush("#EDEBE9");
 
         return new DeviceGridRow
         {
@@ -549,7 +571,7 @@ public partial class MainWindow : Window
             IpAddress = device.IpAddress,
             MachineOnlineText = device.MachineOnline ? "在线" : "离线",
             OnlineBackground = onlineBackground,
-            OnlineForeground = device.MachineOnline ? CreateBrush("#166534") : CreateBrush("#475569"),
+            OnlineForeground = device.MachineOnline ? CreateBrush("#0B6A0B") : CreateBrush("#605E5C"),
             StateText = device.CurrentState.ToDisplayName(),
             StateBackground = stateBackground,
             StateForeground = GetStateForeground(device.CurrentState),
@@ -563,10 +585,10 @@ public partial class MainWindow : Window
             HealthBackground = healthBackground,
             HealthForeground = device.HealthLevel switch
             {
-                DeviceHealthLevel.Normal => CreateBrush("#166534"),
-                DeviceHealthLevel.Warning => CreateBrush("#92400E"),
-                DeviceHealthLevel.Critical => CreateBrush("#991B1B"),
-                _ => CreateBrush("#475569"),
+                DeviceHealthLevel.Normal => CreateBrush("#0B6A0B"),
+                DeviceHealthLevel.Warning => CreateBrush("#8A6A00"),
+                DeviceHealthLevel.Critical => CreateBrush("#A4262C"),
+                _ => CreateBrush("#605E5C"),
             },
             CurrentProgramNo = device.CurrentProgramNo ?? "-",
             SpindleSpeedText = device.SpindleSpeedRpm is null ? "-" : $"{device.SpindleSpeedRpm} rpm",
@@ -599,36 +621,36 @@ public partial class MainWindow : Window
     private static Brush GetStateBackground(MachineOperationalState state) =>
         state switch
         {
-            MachineOperationalState.Processing => CreateBrush("#DCFCE7"),
-            MachineOperationalState.Waiting => CreateBrush("#FEF3C7"),
-            MachineOperationalState.Standby => CreateBrush("#FEF3C7"),
-            MachineOperationalState.PowerOff => CreateBrush("#E2E8F0"),
-            MachineOperationalState.Alarm => CreateBrush("#FEE2E2"),
-            MachineOperationalState.Emergency => CreateBrush("#FECACA"),
-            MachineOperationalState.CommunicationInterrupted => CreateBrush("#F5E8FF"),
-            _ => CreateBrush("#E2E8F0"),
+            MachineOperationalState.Processing => CreateBrush("#DFF6DD"),
+            MachineOperationalState.Waiting => CreateBrush("#FFF4CE"),
+            MachineOperationalState.Standby => CreateBrush("#FFF4CE"),
+            MachineOperationalState.PowerOff => CreateBrush("#EDEBE9"),
+            MachineOperationalState.Alarm => CreateBrush("#FDE7E9"),
+            MachineOperationalState.Emergency => CreateBrush("#FDE7E9"),
+            MachineOperationalState.CommunicationInterrupted => CreateBrush("#E5F1FB"),
+            _ => CreateBrush("#EDEBE9"),
         };
 
     private static Brush GetStateForeground(MachineOperationalState state) =>
         state switch
         {
-            MachineOperationalState.Processing => CreateBrush("#166534"),
-            MachineOperationalState.Waiting => CreateBrush("#92400E"),
-            MachineOperationalState.Standby => CreateBrush("#92400E"),
-            MachineOperationalState.PowerOff => CreateBrush("#475569"),
-            MachineOperationalState.Alarm => CreateBrush("#B91C1C"),
-            MachineOperationalState.Emergency => CreateBrush("#991B1B"),
-            MachineOperationalState.CommunicationInterrupted => CreateBrush("#6D28D9"),
-            _ => CreateBrush("#475569"),
+            MachineOperationalState.Processing => CreateBrush("#0B6A0B"),
+            MachineOperationalState.Waiting => CreateBrush("#8A6A00"),
+            MachineOperationalState.Standby => CreateBrush("#8A6A00"),
+            MachineOperationalState.PowerOff => CreateBrush("#605E5C"),
+            MachineOperationalState.Alarm => CreateBrush("#A4262C"),
+            MachineOperationalState.Emergency => CreateBrush("#A4262C"),
+            MachineOperationalState.CommunicationInterrupted => CreateBrush("#005A9E"),
+            _ => CreateBrush("#605E5C"),
         };
 
     private static Brush GetHealthBackground(DeviceHealthLevel healthLevel) =>
         healthLevel switch
         {
-            DeviceHealthLevel.Normal => CreateBrush("#DCFCE7"),
-            DeviceHealthLevel.Warning => CreateBrush("#FEF3C7"),
-            DeviceHealthLevel.Critical => CreateBrush("#FEE2E2"),
-            _ => CreateBrush("#E2E8F0"),
+            DeviceHealthLevel.Normal => CreateBrush("#DFF6DD"),
+            DeviceHealthLevel.Warning => CreateBrush("#FFF4CE"),
+            DeviceHealthLevel.Critical => CreateBrush("#FDE7E9"),
+            _ => CreateBrush("#EDEBE9"),
         };
 
     private static Brush CreateBrush(string hex)
