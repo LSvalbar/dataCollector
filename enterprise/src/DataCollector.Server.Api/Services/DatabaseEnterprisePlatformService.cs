@@ -212,7 +212,6 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
         var timelineSegments = await dbContext.TimelineSegments
             .AsNoTracking()
             .Where(segment => segment.ReportDateKey == reportDateKey)
-            .OrderBy(segment => segment.StartAt)
             .ToListAsync(cancellationToken);
         var groupedSegments = timelineSegments
             .GroupBy(segment => segment.DeviceId)
@@ -363,7 +362,6 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
         var segments = await dbContext.TimelineSegments
             .AsNoTracking()
             .Where(segment => segment.DeviceId == deviceId && segment.ReportDateKey == ToDateKey(reportDate))
-            .OrderBy(segment => segment.StartAt)
             .ToListAsync(cancellationToken);
 
         var timeline = segments.Count > 0
@@ -728,7 +726,7 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
         DateTimeOffset now)
     {
         var segments = source
-            .OrderBy(segment => segment.StartAt)
+            .OrderBy(segment => segment.StartAt.UtcDateTime)
             .Select(segment => new TimelineSegmentDto
             {
                 State = segment.State,
