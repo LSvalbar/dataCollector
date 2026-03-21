@@ -533,6 +533,7 @@ def read_daily_timeline(
                 spindle_speed_rpm=int(raw_payload.get("spindle_speed_rpm", 0) or 0),
                 running_modes=running_mode_set,
             )
+        state_code = _normalize_report_state_code(state_code)
         _append_timeline_segment(segments, state_code, interval_start, interval_end)
 
     return segments
@@ -575,6 +576,12 @@ def _parse_raw_json(value: str | None) -> dict:
         return json.loads(value)
     except json.JSONDecodeError:
         return {}
+
+
+def _normalize_report_state_code(state_code: str) -> str:
+    if state_code == "running":
+        return "waiting"
+    return state_code
 
 
 def _append_timeline_segment(

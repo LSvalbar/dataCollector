@@ -15,7 +15,7 @@ from .storage import export_snapshots_to_csv, read_daily_timeline, read_latest_v
 STATUS_LABELS = {
     "power_off": "关机",
     "processing": "加工",
-    "running": "运行",
+    "running": "等待",
     "waiting": "等待",
     "idle": "待机",
     "alarm": "报警",

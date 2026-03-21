@@ -21,7 +21,7 @@ WAITING_AUTOMATIC_MODES = {AUTO_MEMORY, AUTO_REMOTE}
 STATE_LABELS = {
     "power_off": "关机",
     "processing": "加工",
-    "running": "运行",
+    "running": "等待",
     "waiting": "等待",
     "idle": "待机",
     "alarm": "报警",
@@ -78,7 +78,7 @@ def classify_machine_state(
     if is_operation_running(int(operation_mode), configured_running_modes):
         if (spindle_speed_rpm or 0) > 0:
             return "processing", STATE_LABELS["processing"]
-        return "running", STATE_LABELS["running"]
+        return "waiting", STATE_LABELS["waiting"]
 
     if int(automatic_mode) in WAITING_AUTOMATIC_MODES:
         return "waiting", STATE_LABELS["waiting"]
