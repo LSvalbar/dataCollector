@@ -78,6 +78,8 @@ class SmokeTest(unittest.TestCase):
             self.assertGreater(latest_count, 0)
             self.assertIn("today_power_on_ms", latest_map)
             self.assertIn("today_processing_ms", latest_map)
+            self.assertIn("today_cutting_ms", latest_map)
+            self.assertIn("today_cycle_ms", latest_map)
             self.assertIn("today_idle_ms", latest_map)
             self.assertIn("today_alarm_ms", latest_map)
             self.assertIn("today_emergency_ms", latest_map)

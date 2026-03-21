@@ -35,6 +35,11 @@ class MachineStatus:
     controller_mode_text: str
     oee_status_number: int
     oee_status_text: str
+    native_power_on_total_ms: int | None = None
+    native_operating_total_ms: int | None = None
+    native_cutting_total_ms: int | None = None
+    native_cycle_total_ms: int | None = None
+    native_free_total_ms: int | None = None
     raw_payload: dict[str, int | str] = field(default_factory=dict)
 
     @classmethod
@@ -50,6 +55,11 @@ class MachineStatus:
             controller_mode_text="Offline",
             oee_status_number=0,
             oee_status_text="Offline",
+            native_power_on_total_ms=None,
+            native_operating_total_ms=None,
+            native_cutting_total_ms=None,
+            native_cycle_total_ms=None,
+            native_free_total_ms=None,
             raw_payload={},
         )
 
@@ -67,6 +77,8 @@ class CounterDelta:
     collected_at: datetime
     power_on_ms: int = 0
     run_ms: int = 0
+    cutting_ms: int = 0
+    cycle_ms: int = 0
     idle_ms: int = 0
     alarm_ms: int = 0
     emergency_ms: int = 0

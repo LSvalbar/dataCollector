@@ -16,11 +16,18 @@ _SENTINEL = object()
 
 
 class StorageWriter:
-    def __init__(self, db_path: str, max_queue_size: int, batch_size: int):
+    def __init__(
+        self,
+        db_path: str,
+        max_queue_size: int,
+        batch_size: int,
+        counter_tz: tzinfo_type | None = None,
+    ):
         self._db_path = Path(db_path)
         self._queue: queue.Queue[WriteEnvelope | object] = queue.Queue(maxsize=max_queue_size)
         self._batch_size = batch_size
         self._flush_interval_ms = 1000
+        self._counter_tz = counter_tz or _resolve_report_timezone(None)
         self._thread = threading.Thread(target=self._run, name="sqlite-writer", daemon=True)
         self._started = False
 
@@ -126,6 +133,8 @@ class StorageWriter:
                 day TEXT PRIMARY KEY,
                 power_on_ms INTEGER NOT NULL DEFAULT 0,
                 run_ms INTEGER NOT NULL DEFAULT 0,
+                cutting_ms INTEGER NOT NULL DEFAULT 0,
+                cycle_ms INTEGER NOT NULL DEFAULT 0,
                 idle_ms INTEGER NOT NULL DEFAULT 0,
                 alarm_ms INTEGER NOT NULL DEFAULT 0,
                 emergency_ms INTEGER NOT NULL DEFAULT 0,
@@ -140,6 +149,8 @@ class StorageWriter:
             );
             """
         )
+        self._ensure_column(connection, "daily_counters", "cutting_ms", "INTEGER NOT NULL DEFAULT 0")
+        self._ensure_column(connection, "daily_counters", "cycle_ms", "INTEGER NOT NULL DEFAULT 0")
         self._ensure_column(connection, "daily_counters", "idle_ms", "INTEGER NOT NULL DEFAULT 0")
         connection.commit()
 
@@ -271,7 +282,7 @@ class StorageWriter:
 
                 if envelope.counter_delta is not None:
                     counter = envelope.counter_delta
-                    day = counter.collected_at.astimezone(timezone.utc).date().isoformat()
+                    day = counter.collected_at.astimezone(self._counter_tz).date().isoformat()
                     counter_days_to_refresh.add(day)
                     connection.execute(
                         """
@@ -279,15 +290,19 @@ class StorageWriter:
                             day,
                             power_on_ms,
                             run_ms,
+                            cutting_ms,
+                            cycle_ms,
                             idle_ms,
                             alarm_ms,
                             emergency_ms,
                             sample_count,
                             updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ON CONFLICT(day) DO UPDATE SET
                             power_on_ms = daily_counters.power_on_ms + excluded.power_on_ms,
                             run_ms = daily_counters.run_ms + excluded.run_ms,
+                            cutting_ms = daily_counters.cutting_ms + excluded.cutting_ms,
+                            cycle_ms = daily_counters.cycle_ms + excluded.cycle_ms,
                             idle_ms = daily_counters.idle_ms + excluded.idle_ms,
                             alarm_ms = daily_counters.alarm_ms + excluded.alarm_ms,
                             emergency_ms = daily_counters.emergency_ms + excluded.emergency_ms,
@@ -298,6 +313,8 @@ class StorageWriter:
                             day,
                             counter.power_on_ms,
                             counter.run_ms,
+                            counter.cutting_ms,
+                            counter.cycle_ms,
                             counter.idle_ms,
                             counter.alarm_ms,
                             counter.emergency_ms,
@@ -324,6 +341,9 @@ class StorageWriter:
 
 def _latest_values_from_snapshot(snapshot: MachineStatus) -> dict[str, tuple[str, str]]:
     updated_at = isoformat_utc(snapshot.collected_at)
+    def _optional_number_text(value: int | None) -> str:
+        return "" if value is None else str(value)
+
     return {
         "machine_name": (str(snapshot.raw_payload.get("machine_name", "")), updated_at),
         "machine_ip": (str(snapshot.raw_payload.get("machine_ip", "")), updated_at),
@@ -337,6 +357,14 @@ def _latest_values_from_snapshot(snapshot: MachineStatus) -> dict[str, tuple[str
         "controller_mode_text": (snapshot.controller_mode_text, updated_at),
         "oee_status_number": (str(snapshot.oee_status_number), updated_at),
         "oee_status_text": (snapshot.oee_status_text, updated_at),
+        "native_power_on_total_ms": (_optional_number_text(snapshot.native_power_on_total_ms), updated_at),
+        "native_operating_total_ms": (_optional_number_text(snapshot.native_operating_total_ms), updated_at),
+        "native_cutting_total_ms": (_optional_number_text(snapshot.native_cutting_total_ms), updated_at),
+        "native_cycle_total_ms": (_optional_number_text(snapshot.native_cycle_total_ms), updated_at),
+        "native_free_total_ms": (_optional_number_text(snapshot.native_free_total_ms), updated_at),
+        "current_alarm_text": (str(snapshot.raw_payload.get("current_alarm_text", "")), updated_at),
+        "last_processing_program_number": (str(snapshot.raw_payload.get("last_processing_program_number", "")), updated_at),
+        "last_processing_duration_ms": (str(snapshot.raw_payload.get("last_processing_duration_ms", "")), updated_at),
     }
 
 
@@ -358,7 +386,7 @@ def _latest_values_from_transitions(transitions) -> dict[str, tuple[str, str]]:
 def _latest_counter_keys(connection: sqlite3.Connection, day: str) -> dict[str, tuple[str, str]]:
     row = connection.execute(
         """
-        SELECT power_on_ms, run_ms, idle_ms, alarm_ms, emergency_ms, updated_at
+        SELECT power_on_ms, run_ms, cutting_ms, cycle_ms, idle_ms, alarm_ms, emergency_ms, updated_at
         FROM daily_counters
         WHERE day = ?
         """,
@@ -367,12 +395,14 @@ def _latest_counter_keys(connection: sqlite3.Connection, day: str) -> dict[str, 
     if row is None:
         return {}
 
-    power_on_ms, run_ms, idle_ms, alarm_ms, emergency_ms, updated_at = row
+    power_on_ms, run_ms, cutting_ms, cycle_ms, idle_ms, alarm_ms, emergency_ms, updated_at = row
     utilization = 0.0 if int(power_on_ms) <= 0 else (int(run_ms) / int(power_on_ms)) * 100.0
     return {
         "counter_day": (day, updated_at),
         "today_power_on_ms": (str(power_on_ms), updated_at),
         "today_processing_ms": (str(run_ms), updated_at),
+        "today_cutting_ms": (str(cutting_ms), updated_at),
+        "today_cycle_ms": (str(cycle_ms), updated_at),
         "today_idle_ms": (str(idle_ms), updated_at),
         "today_alarm_ms": (str(alarm_ms), updated_at),
         "today_emergency_ms": (str(emergency_ms), updated_at),

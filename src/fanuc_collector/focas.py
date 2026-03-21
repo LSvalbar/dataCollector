@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ctypes
-from ctypes import POINTER, byref, c_char, c_char_p, c_long, c_short, c_ushort
+from ctypes import POINTER, byref, c_char, c_char_p, c_long, c_short, c_ubyte, c_ushort
 import os
 from pathlib import Path
 import socket
@@ -12,6 +12,13 @@ from .models import MachineStatus, SystemInfo, utc_now
 
 
 EW_OK = 0
+ALARM_TYPE_ALL = -1
+ALARM_INFORMATION2 = 1
+TYPE_POWER_ON = 0
+TYPE_OPERATING = 1
+TYPE_CUTTING = 2
+TYPE_CYCLE = 3
+TYPE_FREE = 4
 
 FOCAS_ERROR_DETAILS = {
     -17: ("EW_PROTOCOL", "协议错误"),
@@ -104,6 +111,68 @@ class ODBST(ctypes.Structure):
     ]
 
 
+class ODBPTIME_RECORD(ctypes.Structure):
+    _fields_ = [
+        ("prg_no", c_long),
+        ("hour", c_short),
+        ("minute", c_ubyte),
+        ("second", c_ubyte),
+    ]
+
+
+class ODBPTIME(ctypes.Structure):
+    _fields_ = [
+        ("num", c_short),
+        ("data", ODBPTIME_RECORD * 10),
+    ]
+
+
+class IODBTIME(ctypes.Structure):
+    _fields_ = [
+        ("minute", c_long),
+        ("msec", c_long),
+    ]
+
+
+class ALMINFO2_ENTRY(ctypes.Structure):
+    _fields_ = [
+        ("axis", c_short),
+        ("alm_no", c_short),
+        ("msg_len", c_short),
+        ("alm_msg", c_char * 34),
+    ]
+
+
+class ALMINFO2_ALM2(ctypes.Structure):
+    _fields_ = [
+        ("alm", ALMINFO2_ENTRY * 5),
+        ("data_end", c_short),
+    ]
+
+
+class ALMINFO2_UNION(ctypes.Union):
+    _fields_ = [
+        ("alm2", ALMINFO2_ALM2),
+    ]
+
+
+class ALMINFO2(ctypes.Structure):
+    _fields_ = [
+        ("u", ALMINFO2_UNION),
+    ]
+
+
+class ODBALMMSG2(ctypes.Structure):
+    _fields_ = [
+        ("alm_no", c_long),
+        ("type", c_short),
+        ("axis", c_short),
+        ("dummy", c_short),
+        ("msg_len", c_short),
+        ("alm_msg", c_char * 64),
+    ]
+
+
 def focas_error_text(code: int) -> str:
     name, description = FOCAS_ERROR_DETAILS.get(code, (f"UNKNOWN_{code}", "未知错误"))
     return f"{name}({code}): {description}"
@@ -111,6 +180,13 @@ def focas_error_text(code: int) -> str:
 
 def _decode_ascii(raw_value) -> str:
     return bytes(raw_value).decode("ascii", errors="ignore").replace("\x00", "").strip()
+
+
+def _decode_text(raw_value, length: int | None = None) -> str:
+    data = bytes(raw_value)
+    if length is not None and length >= 0:
+        data = data[:length]
+    return data.decode("ascii", errors="ignore").replace("\x00", "").strip()
 
 
 def controller_mode_text(mode: int) -> str:
@@ -177,6 +253,14 @@ class FocasClient:
         self._lib.cnc_sysinfo.restype = c_short
         self._lib.cnc_statinfo.argtypes = [c_ushort, POINTER(ODBST)]
         self._lib.cnc_statinfo.restype = c_short
+        self._lib.cnc_rdtimer.argtypes = [c_ushort, c_short, POINTER(IODBTIME)]
+        self._lib.cnc_rdtimer.restype = c_short
+        self._lib.cnc_rdproctime.argtypes = [c_ushort, POINTER(ODBPTIME)]
+        self._lib.cnc_rdproctime.restype = c_short
+        self._lib.cnc_rdalminfo2.argtypes = [c_ushort, c_short, c_short, c_short, POINTER(ALMINFO2)]
+        self._lib.cnc_rdalminfo2.restype = c_short
+        self._lib.cnc_rdalmmsg2.argtypes = [c_ushort, c_short, POINTER(c_short), POINTER(ODBALMMSG2)]
+        self._lib.cnc_rdalmmsg2.restype = c_short
 
         result = self._lib.cnc_allclibhndl3(
             self._ip.encode("ascii"),
@@ -225,6 +309,8 @@ class FocasClient:
         if result != EW_OK:
             raise FocasCommunicationError(f"cnc_statinfo failed with code {result}")
 
+        timer_totals = self.read_timer_totals()
+
         automatic_mode = int(buffer.aut)
         operation_mode = int(buffer.run)
         emergency_state = int(buffer.emergency)
@@ -249,6 +335,11 @@ class FocasClient:
             controller_mode_text=controller_mode,
             oee_status_number=oee_number,
             oee_status_text=oee_text,
+            native_power_on_total_ms=timer_totals.get("power_on_total_ms"),
+            native_operating_total_ms=timer_totals.get("operating_total_ms"),
+            native_cutting_total_ms=timer_totals.get("cutting_total_ms"),
+            native_cycle_total_ms=timer_totals.get("cycle_total_ms"),
+            native_free_total_ms=timer_totals.get("free_total_ms"),
             raw_payload={
                 "automatic_mode": automatic_mode,
                 "operation_mode": operation_mode,
@@ -256,12 +347,122 @@ class FocasClient:
                 "alarm_state": alarm_state,
                 "controller_mode_number": controller_mode_number,
                 "oee_status_number": oee_number,
+                **timer_totals,
             },
         )
+
+    def read_timer_totals(self) -> dict[str, int | str]:
+        self._ensure_connected()
+        timer_map = {
+            "power_on_total_ms": TYPE_POWER_ON,
+            "operating_total_ms": TYPE_OPERATING,
+            "cutting_total_ms": TYPE_CUTTING,
+            "cycle_total_ms": TYPE_CYCLE,
+            "free_total_ms": TYPE_FREE,
+        }
+        values: dict[str, int | str] = {}
+        errors: list[str] = []
+
+        for key, timer_type in timer_map.items():
+            timer_value, error_code = self._try_read_timer(timer_type)
+            if timer_value is not None:
+                values[key] = timer_value
+            elif error_code is not None:
+                errors.append(f"{key}:{focas_error_text(error_code)}")
+
+        if errors:
+            values["native_timer_errors"] = " | ".join(errors)
+
+        return values
+
+    def read_processing_time_records(self) -> list[dict[str, int]]:
+        self._ensure_connected()
+        buffer = ODBPTIME()
+        result = self._lib.cnc_rdproctime(self._handle, byref(buffer))
+        if result != EW_OK:
+            return []
+
+        record_count = max(0, min(int(buffer.num), len(buffer.data)))
+        records: list[dict[str, int]] = []
+        for index in range(record_count):
+            record = buffer.data[index]
+            if int(record.prg_no) == 0 and int(record.hour) == 0 and int(record.minute) == 0 and int(record.second) == 0:
+                continue
+            records.append(
+                {
+                    "program_number": int(record.prg_no),
+                    "hour": int(record.hour),
+                    "minute": int(record.minute),
+                    "second": int(record.second),
+                    "duration_ms": (
+                        int(record.hour) * 3600 + int(record.minute) * 60 + int(record.second)
+                    )
+                    * 1000,
+                }
+            )
+        return records
+
+    def read_alarm_details(self) -> list[dict[str, int | str]]:
+        self._ensure_connected()
+        details = self._read_alarm_messages()
+        if details:
+            return details
+        return self._read_alarm_info()
 
     def _ensure_connected(self) -> None:
         if self._lib is None or self._handle.value == 0:
             raise FocasCommunicationError("FOCAS client is not connected")
+
+    def _try_read_timer(self, timer_type: int) -> tuple[int | None, int | None]:
+        buffer = IODBTIME()
+        result = self._lib.cnc_rdtimer(self._handle, timer_type, byref(buffer))
+        if result != EW_OK:
+            return None, int(result)
+        return int(buffer.minute) * 60_000 + int(buffer.msec), None
+
+    def _read_alarm_messages(self) -> list[dict[str, int | str]]:
+        max_alarm_count = 10
+        read_count = c_short(max_alarm_count)
+        buffer = (ODBALMMSG2 * max_alarm_count)()
+        result = self._lib.cnc_rdalmmsg2(self._handle, ALARM_TYPE_ALL, byref(read_count), buffer)
+        if result != EW_OK:
+            return []
+
+        details: list[dict[str, int | str]] = []
+        for index in range(max(0, min(int(read_count.value), max_alarm_count))):
+            item = buffer[index]
+            message_text = _decode_text(item.alm_msg, int(item.msg_len))
+            if int(item.alm_no) == 0 and not message_text:
+                continue
+            details.append(
+                {
+                    "alarm_number": int(item.alm_no),
+                    "alarm_type": int(item.type),
+                    "axis": int(item.axis),
+                    "message": message_text,
+                }
+            )
+        return details
+
+    def _read_alarm_info(self) -> list[dict[str, int | str]]:
+        buffer = ALMINFO2()
+        result = self._lib.cnc_rdalminfo2(self._handle, ALARM_INFORMATION2, ALARM_TYPE_ALL, 0, byref(buffer))
+        if result != EW_OK:
+            return []
+
+        details: list[dict[str, int | str]] = []
+        for item in buffer.u.alm2.alm:
+            message_text = _decode_text(item.alm_msg, int(item.msg_len))
+            if int(item.alm_no) == 0 and not message_text:
+                continue
+            details.append(
+                {
+                    "alarm_number": int(item.alm_no),
+                    "axis": int(item.axis),
+                    "message": message_text,
+                }
+            )
+        return details
 
     def _format_connect_error(self, code: int) -> str:
         context = [

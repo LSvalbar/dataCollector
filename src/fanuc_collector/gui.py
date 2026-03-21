@@ -55,6 +55,9 @@ CURRENT_STATUS_LABELS = {
     "oee_status_text": "当前机床状态",
     "alarm_state": "报警状态",
     "emergency_state": "急停状态",
+    "current_alarm_text": "当前报警信息",
+    "last_processing_program_number": "最近程序号",
+    "last_processing_duration_ms": "最近程序加工时长",
     "observed_power_on_at": "最近开机时间",
     "observed_power_off_at": "最近关机时间",
 }
@@ -62,7 +65,9 @@ CURRENT_STATUS_LABELS = {
 DAILY_METRIC_LABELS = {
     "counter_day": "统计日期",
     "today_power_on_ms": "当日开机累计时长",
-    "today_processing_ms": "当日加工累计时长",
+    "today_processing_ms": "当日运转累计时长",
+    "today_cutting_ms": "当日切削累计时长",
+    "today_cycle_ms": "当日循环累计时长",
     "today_idle_ms": "当日待机累计时长",
     "today_alarm_ms": "当日报警累计时长",
     "today_emergency_ms": "当日急停累计时长",
@@ -80,6 +85,9 @@ CURRENT_STATUS_ORDER = [
     "operation_mode",
     "alarm_state",
     "emergency_state",
+    "current_alarm_text",
+    "last_processing_program_number",
+    "last_processing_duration_ms",
     "observed_power_on_at",
     "observed_power_off_at",
 ]
@@ -88,6 +96,8 @@ DAILY_METRIC_ORDER = [
     "counter_day",
     "today_power_on_ms",
     "today_processing_ms",
+    "today_cutting_ms",
+    "today_cycle_ms",
     "today_idle_ms",
     "today_alarm_ms",
     "today_emergency_ms",
@@ -371,8 +381,8 @@ class CollectorGui:
         return f"{label:<16} {display_value}"
 
     def _format_display_value(self, key: str, raw_value: str) -> str:
-        if raw_value == "--":
-            return raw_value
+        if raw_value in {"--", ""}:
+            return "--"
 
         mapped_value = VALUE_MAPPERS.get(key, {}).get(raw_value, raw_value)
 
