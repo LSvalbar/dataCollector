@@ -146,7 +146,7 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="HorizontalGridLinesBrush" Value="#E1DFDD" />
             <Setter Property="VerticalGridLinesBrush" Value="#E1DFDD" />
-            <Setter Property="RowHeight" Value="38" />
+            <Setter Property="RowHeight" Value="34" />
             <Setter Property="SelectionMode" Value="Single" />
         </Style>
 
@@ -160,27 +160,36 @@
         </Style>
 
         <Style x:Key="TreeExpanderToggleStyle" TargetType="ToggleButton">
-            <Setter Property="Width" Value="14" />
-            <Setter Property="Height" Value="14" />
+            <Setter Property="Width" Value="13" />
+            <Setter Property="Height" Value="13" />
             <Setter Property="Focusable" Value="False" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
-                        <Border Width="14"
-                                Height="14"
-                                Background="White"
-                                BorderBrush="#8A8886"
+                        <Border Width="13"
+                                Height="13"
+                                BorderBrush="#6F6F6F"
                                 BorderThickness="1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Color="#F8F8F8" Offset="0" />
+                                    <GradientStop Color="#D5D5D5" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
                             <TextBlock x:Name="GlyphText"
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"
-                                       FontSize="11"
+                                       FontSize="10"
+                                       FontWeight="Bold"
                                        Foreground="{StaticResource TextPrimaryBrush}"
                                        Text="+" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="GlyphText" Property="Text" Value="-" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="BorderBrush" Value="#4F4F4F" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -196,8 +205,8 @@
         </Style>
 
         <Style TargetType="TreeViewItem">
-            <Setter Property="Margin" Value="0,2,0,2" />
-            <Setter Property="Padding" Value="2" />
+            <Setter Property="Margin" Value="0,1,0,1" />
+            <Setter Property="Padding" Value="1" />
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
             <Setter Property="Template">
                 <Setter.Value>

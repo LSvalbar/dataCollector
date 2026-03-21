@@ -268,11 +268,8 @@ public partial class MainWindow : Window
             {
                 NodeType = ScopeNodeType.Department,
                 ScopeKey = departmentGroup.Key.DepartmentCode,
-                Title = departmentGroup.Key.DepartmentName,
-                Subtitle = $"{departmentGroup.Count()} 台机床",
-                Glyph = "\uE80F",
-                AccentBackground = Brushes.Transparent,
-                AccentForeground = Brushes.Transparent,
+                Title = $"{departmentGroup.Key.DepartmentName} ({departmentGroup.Count()})",
+                Subtitle = $"{departmentGroup.Key.DepartmentCode} | {departmentGroup.Count()} 台机床",
                 Children = departmentGroup
                     .GroupBy(device => new { device.WorkshopCode, device.WorkshopName })
                     .OrderBy(group => group.Key.WorkshopCode)
@@ -280,11 +277,8 @@ public partial class MainWindow : Window
                     {
                         NodeType = ScopeNodeType.Workshop,
                         ScopeKey = workshopGroup.Key.WorkshopCode,
-                        Title = workshopGroup.Key.WorkshopName,
-                        Subtitle = $"{workshopGroup.Count()} 台机床",
-                        Glyph = "\uE7F1",
-                        AccentBackground = Brushes.Transparent,
-                        AccentForeground = Brushes.Transparent,
+                        Title = $"{workshopGroup.Key.WorkshopName} ({workshopGroup.Count()})",
+                        Subtitle = $"{workshopGroup.Key.WorkshopCode} | {workshopGroup.Count()} 台机床",
                         Children = workshopGroup
                             .OrderBy(device => device.DeviceCode)
                             .Select(device => new OrganizationTreeNode
@@ -294,9 +288,6 @@ public partial class MainWindow : Window
                                 DeviceId = device.DeviceId,
                                 Title = $"{device.DeviceCode} - {device.DeviceName}",
                                 Subtitle = $"{device.ControllerModel} | {device.IpAddress}:{device.Port}",
-                                Glyph = "\uE9CE",
-                                AccentBackground = Brushes.Transparent,
-                                AccentForeground = Brushes.Transparent,
                             })
                             .ToList(),
                     })
@@ -346,9 +337,9 @@ public partial class MainWindow : Window
     {
         var border = new Border
         {
-            Width = 188,
-            Margin = new Thickness(0, 0, 12, 12),
-            Padding = new Thickness(14),
+            Width = 166,
+            Margin = new Thickness(0, 0, 10, 10),
+            Padding = new Thickness(10),
             Background = _whiteBrush,
             BorderBrush = CreateBrush("#C8C6C4"),
             BorderThickness = new Thickness(1),
@@ -375,27 +366,29 @@ public partial class MainWindow : Window
 
         var stack = new StackPanel
         {
-            Margin = new Thickness(12, 0, 0, 0),
+            Margin = new Thickness(10, 0, 0, 0),
             Children =
             {
                 new TextBlock
                 {
                     Text = title,
                     Foreground = CreateBrush("#605E5C"),
+                    FontSize = 12,
                     FontWeight = FontWeights.SemiBold,
                 },
                 new TextBlock
                 {
-                    Margin = new Thickness(0, 8, 0, 0),
+                    Margin = new Thickness(0, 6, 0, 0),
                     Text = value,
                     Foreground = CreateBrush("#201F1E"),
-                    FontSize = 24,
+                    FontSize = 20,
                     FontWeight = FontWeights.Bold,
                 },
                 new TextBlock
                 {
-                    Margin = new Thickness(0, 6, 0, 0),
+                    Margin = new Thickness(0, 4, 0, 0),
                     Text = hint,
+                    FontSize = 11,
                     Foreground = CreateBrush("#605E5C"),
                 },
             },
@@ -1342,12 +1335,6 @@ public sealed class OrganizationTreeNode
     public required string Title { get; init; }
 
     public required string Subtitle { get; init; }
-
-    public required string Glyph { get; init; }
-
-    public required Brush AccentBackground { get; init; }
-
-    public required Brush AccentForeground { get; init; }
 
     public List<OrganizationTreeNode> Children { get; init; } = [];
 }

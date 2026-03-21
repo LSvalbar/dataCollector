@@ -24,8 +24,8 @@ public sealed class FormulaEngineTests
             ObservedMinutes = 840,
         });
 
-        var powerOnRate = _formulaEngine.Evaluate("(power_on_minutes / observed_minutes) * 100", variables);
-        var utilizationRate = _formulaEngine.Evaluate("(processing_minutes / power_on_minutes) * 100", variables);
+        var powerOnRate = _formulaEngine.Evaluate("(开机时间 / 已观测时间) * 100", variables);
+        var utilizationRate = _formulaEngine.Evaluate("(加工时间 / 开机时间) * 100", variables);
 
         Assert.Equal(71.43, powerOnRate);
         Assert.Equal(75.00, utilizationRate);
@@ -34,10 +34,10 @@ public sealed class FormulaEngineTests
     [Fact]
     public void Evaluate_ShouldReturnZeroWhenDivideByZero()
     {
-        var value = _formulaEngine.Evaluate("processing_minutes / power_on_minutes * 100", new Dictionary<string, double>
+        var value = _formulaEngine.Evaluate("加工时间 / 开机时间 * 100", new Dictionary<string, double>
         {
-            ["processing_minutes"] = 120,
-            ["power_on_minutes"] = 0,
+            ["加工时间"] = 120,
+            ["开机时间"] = 0,
         });
 
         Assert.Equal(0, value);

@@ -12,16 +12,12 @@
         MinHeight="860">
     <Window.Resources>
         <HierarchicalDataTemplate DataType="{x:Type local:OrganizationTreeNode}" ItemsSource="{Binding Children}">
-            <StackPanel Orientation="Horizontal" Margin="0,1,0,1">
+            <StackPanel Orientation="Horizontal" Margin="0,1,0,1" ToolTip="{Binding Subtitle}">
                 <TextBlock VerticalAlignment="Center"
-                           FontFamily="Segoe Fluent Icons"
-                           FontSize="13"
-                           Foreground="{StaticResource TextSecondaryBrush}"
-                           Text="{Binding Glyph}" />
-                <StackPanel Margin="8,0,0,0">
-                    <TextBlock FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" Text="{Binding Title}" />
-                    <TextBlock Margin="0,3,0,0" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" Text="{Binding Subtitle}" />
-                </StackPanel>
+                           FontSize="12.5"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           Text="{Binding Title}" />
             </StackPanel>
         </HierarchicalDataTemplate>
     </Window.Resources>
@@ -32,12 +28,12 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid Margin="20,22,20,0">
+        <Grid Margin="18,20,18,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock Margin="0,8,0,0"
+            <TextBlock Margin="0,12,0,0"
                        VerticalAlignment="Center"
                        FontSize="30"
                        FontWeight="Bold"
@@ -64,12 +60,12 @@
             </StackPanel>
         </Grid>
 
-        <TabControl x:Name="MainTabControl" Grid.Row="1" Margin="20,10,20,20">
+        <TabControl x:Name="MainTabControl" Grid.Row="1" Margin="18,8,18,18">
             <TabItem x:Name="DeviceManagementTab" Header="设备管理">
-                <Grid Margin="0,14,0,0">
+                <Grid Margin="0,10,0,0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="320" />
-                        <ColumnDefinition Width="20" />
+                        <ColumnDefinition Width="280" MinWidth="220" />
+                        <ColumnDefinition Width="6" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
@@ -79,10 +75,10 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
-                            <TextBlock FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="组织视图" />
+                            <TextBlock FontSize="17" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="设备树" />
                             <TreeView x:Name="DeviceTreeView"
                                       Grid.Row="1"
-                                      Margin="0,18,0,0"
+                                      Margin="0,12,0,0"
                                       MouseDoubleClick="DeviceTreeView_MouseDoubleClick"
                                       PreviewMouseRightButtonDown="DeviceTreeView_PreviewMouseRightButtonDown"
                                       SelectedItemChanged="DeviceTreeView_SelectedItemChanged">
@@ -97,6 +93,13 @@
                             </TreeView>
                         </Grid>
                     </Border>
+
+                    <GridSplitter Grid.Column="1"
+                                  Width="6"
+                                  HorizontalAlignment="Stretch"
+                                  VerticalAlignment="Stretch"
+                                  Background="#D2D0CE"
+                                  ShowsPreview="True" />
 
                     <Grid Grid.Column="2">
                         <Grid.RowDefinitions>
@@ -119,7 +122,7 @@
                             </StackPanel>
                         </Grid>
 
-                        <WrapPanel x:Name="ScopeCardsPanel" Grid.Row="1" Margin="0,18,0,10" />
+                        <WrapPanel x:Name="ScopeCardsPanel" Grid.Row="1" Margin="0,12,0,8" />
 
                         <Border Grid.Row="2" Style="{StaticResource CardBorderStyle}">
                             <DataGrid x:Name="DevicesGrid"
@@ -440,7 +443,7 @@
                                     <TextBlock FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="{StaticResource TextPrimaryBrush}" Text="&#xE7EE;" />
                                     <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="Bold" Text="服务端" />
                                     <TextBlock Margin="0,8,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                        服务端放在机房或中心服务器，负责统一接收 Agent 上传的数据，保存设备档案、公式、时间线、权限和报表结果，并向客户端提供 API。
+                                        服务端放在机房或中心服务器，负责统一接收 Agent 上传的数据，保存设备档案、公式、时间线、权限和报表结果，并把实时状态与历史时间线写入本地数据库。
                                     </TextBlock>
                                 </StackPanel>
                             </Border>
@@ -450,7 +453,7 @@
                                     <TextBlock FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="{StaticResource TextPrimaryBrush}" Text="&#xE83A;" />
                                     <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="Bold" Text="Agent" />
                                     <TextBlock Margin="0,8,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                        Agent 放在车间采集机上，直接连接机床网络。它负责采集 FOCAS 数据、本地缓存、断线重连、补传和心跳上报。
+                                        Agent 放在车间采集机上，直接连接机床网络。它负责采集 FOCAS 数据，并按设备编码把实时快照上传到服务端；如果设备编码、Agent 节点或上传地址不一致，服务端不会认领这台机床。
                                     </TextBlock>
                                 </StackPanel>
                             </Border>
@@ -466,13 +469,16 @@
                                     2. 每个车间至少准备一台可连接机床网络的 Agent 采集机，推荐双网卡。
                                 </TextBlock>
                                 <TextBlock Margin="0,10,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                    3. 在客户端录入部门、车间、设备、IP、端口和 Agent 节点。
+                                    3. 在客户端录入部门、车间、设备、IP、端口和 Agent 节点，设备编码必须唯一。
                                 </TextBlock>
                                 <TextBlock Margin="0,10,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                    4. 先用一台样机做点位和口径确认，再逐步扩展到整个车间。
+                                    4. 编辑 Agent 的 appsettings.json，把 AgentNodeName、UploadEndpoint、Machines[].DeviceCode、Machines[].IpAddress、Machines[].Port 配成和设备档案一致。
                                 </TextBlock>
                                 <TextBlock Margin="0,10,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                    5. 报表中的开机率、利用率公式由管理口径决定，可以在统计报表页直接维护。
+                                    5. 如果机床能 ping 通但客户端仍显示离线，优先检查 Agent 是否启动、DeviceCode 是否一致、Agent 节点是否一致、设备是否被禁用。
+                                </TextBlock>
+                                <TextBlock Margin="0,10,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
+                                    6. 报表中的开机率、利用率公式由管理口径决定，可以在统计报表页直接维护。
                                 </TextBlock>
                             </StackPanel>
                         </Border>

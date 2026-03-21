@@ -13,11 +13,18 @@ internal sealed class RealtimeIngestionClient
         _options = options;
     }
 
-    public async Task PushAsync(IReadOnlyList<MachineRealtimeSnapshotDto> snapshots, CancellationToken cancellationToken)
+    public async Task<MachineRealtimeIngestionResultDto> PushAsync(IReadOnlyList<MachineRealtimeSnapshotDto> snapshots, CancellationToken cancellationToken)
     {
         if (snapshots.Count == 0)
         {
-            return;
+            return new MachineRealtimeIngestionResultDto
+            {
+                AcceptedSnapshots = 0,
+                UnknownDeviceCodes = [],
+                AgentNodeMismatchDeviceCodes = [],
+                DisabledDeviceCodes = [],
+                ProcessedAt = DateTimeOffset.Now,
+            };
         }
 
         var response = await _httpClient.PostAsJsonAsync(
@@ -31,5 +38,14 @@ internal sealed class RealtimeIngestionClient
             cancellationToken);
 
         response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<MachineRealtimeIngestionResultDto>(cancellationToken)
+            ?? new MachineRealtimeIngestionResultDto
+            {
+                AcceptedSnapshots = snapshots.Count,
+                UnknownDeviceCodes = [],
+                AgentNodeMismatchDeviceCodes = [],
+                DisabledDeviceCodes = [],
+                ProcessedAt = DateTimeOffset.Now,
+            };
     }
 }

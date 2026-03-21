@@ -8,21 +8,17 @@ namespace DataCollector.Server.Api.Controllers;
 [Route("api/ingestion")]
 public sealed class IngestionController : ControllerBase
 {
-    private readonly LiveDeviceStateStore _liveDeviceStateStore;
+    private readonly IRealtimeIngestionService _realtimeIngestionService;
 
-    public IngestionController(LiveDeviceStateStore liveDeviceStateStore)
+    public IngestionController(IRealtimeIngestionService realtimeIngestionService)
     {
-        _liveDeviceStateStore = liveDeviceStateStore;
+        _realtimeIngestionService = realtimeIngestionService;
     }
 
     [HttpPost("snapshots")]
-    public IActionResult IngestSnapshots([FromBody] MachineRealtimeBatchDto batch)
+    public async Task<ActionResult<MachineRealtimeIngestionResultDto>> IngestSnapshots([FromBody] MachineRealtimeBatchDto batch, CancellationToken cancellationToken)
     {
-        _liveDeviceStateStore.Ingest(batch);
-        return Accepted(new
-        {
-            accepted = batch.Snapshots.Count,
-            timestamp = DateTimeOffset.Now,
-        });
+        var result = await _realtimeIngestionService.IngestAsync(batch, cancellationToken);
+        return Accepted(result);
     }
 }

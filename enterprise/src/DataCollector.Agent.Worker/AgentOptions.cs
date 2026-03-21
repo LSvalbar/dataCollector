@@ -8,7 +8,7 @@ public sealed class AgentOptions
 
     public string LocalCachePath { get; set; } = "C:\\DataCollector\\AgentCache";
 
-    public string UploadEndpoint { get; set; } = "http://localhost:5180/api/ingestion";
+    public string UploadEndpoint { get; set; } = "http://localhost:5180/api/ingestion/snapshots";
 
     public int PollIntervalMilliseconds { get; set; } = 1000;
 

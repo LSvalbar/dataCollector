@@ -5,7 +5,7 @@
 ## 工程结构
 
 - `src/DataCollector.Server.Api`
-  中央服务端 API。负责设备档案、日报、时间线、公式、权限和实时接入。
+  中央服务端 API。负责设备档案、日报、时间线、公式、权限、SQLite 持久化和实时接入。
 - `src/DataCollector.Agent.Worker`
   车间边缘采集 Agent。正式部署时以 Windows Service 方式运行，负责直连机床、采集、缓存、补传、心跳上报。
 - `src/DataCollector.Desktop.Wpf`
@@ -42,6 +42,7 @@
 - 存设备主数据
 - 存时间线和日报
 - 存公式和权限
+- 把实时状态和历史时间线写入数据库
 - 给客户端提供统一 API
 
 ### Agent
@@ -57,6 +58,17 @@ Agent 是车间里的采集程序。
 - 恢复后补传
 - 上报心跳和实时快照
 
+## 数据库持久化
+
+正式版服务端已经切到 `SQLite` 持久化。
+
+- 默认数据库文件：`server\data\enterprise.db`
+- 服务端首次启动会自动建库和初始化基础数据
+- 当前已经持久化：设备、公式、用户、角色、实时状态、时间线
+- 这样即使服务端重启，设备档案和历史时间线也不会丢
+
+这一步的目的，是先把试点跑稳。后面如果你要切 `SQL Server` 或其它数据库，再在当前持久层边界上加 provider，不是继续回到内存仓储。
+
 ## 你要做什么
 
 1. 在机房准备一台中央服务主机，部署服务端和数据库。
@@ -64,6 +76,63 @@ Agent 是车间里的采集程序。
 3. 在客户端录入部门、车间、设备、IP、端口、Agent 节点。
 4. 先用一台样机做点位和口径确认，再逐步扩到整车间。
 5. 管理口径确定后，在统计报表页维护开机率和利用率公式。
+
+## Agent 怎么用
+
+Agent 不是“装上就自己知道采谁”。当前版本必须显式配置。
+
+配置文件在：
+
+- `src/DataCollector.Agent.Worker/appsettings.json`
+- 发布包里是：`agent\appsettings.json`
+
+关键字段如下：
+
+- `AgentNodeName`
+  必须和客户端里设备档案的 `Agent 节点` 完全一致。
+- `UploadEndpoint`
+  正常填：`http://localhost:5180/api/ingestion/snapshots`
+- `Machines[].DeviceCode`
+  必须和客户端设备档案里的 `设备编码` 完全一致。
+- `Machines[].IpAddress`
+  机床实际 IP。
+- `Machines[].Port`
+  一般是 `8193`。
+- `Machines[].ProcessingOperationModes`
+  当前按加工态识别的运行模式。
+- `Machines[].WaitingOperationModes`
+  当前按等待态识别的运行模式。
+
+## 为什么机床能 ping 通，但界面还是显示离线
+
+`Enterprise` 版显示在线，不是只看 `ping`，而是看：
+
+1. Agent 是否真的启动了
+2. Agent 是否成功读到了 FOCAS 数据
+3. Agent 是否把快照上传到了服务端
+4. 上传的 `DeviceCode` 是否能在服务端找到同名设备
+5. `AgentNodeName` 是否和设备档案里一致
+6. 该设备是否被启用
+
+所以你会遇到这种情况：
+
+- `ping` 通
+- Python 版也能采
+- 但 Enterprise 里还是离线
+
+这通常说明：
+
+- `agent\appsettings.json` 没配这台设备
+- `DeviceCode` 不一致
+- `AgentNodeName` 不一致
+- Agent 没启动
+- Agent 上传地址不对
+
+当前 Agent 已经补了更明确的日志。如果服务端没匹配到设备，会直接提示：
+
+- 未找到设备编码
+- Agent 节点不匹配
+- 设备已被禁用
 
 ## 启动方式
 
@@ -115,12 +184,12 @@ powershell -ExecutionPolicy Bypass -File D:\Project\Codex\DataCollector\enterpri
 - 已有设备树菜单、设备详情弹窗、1 秒自动刷新
 - 已有统计报表、设备运行时间线、用户角色权限页面
 - 已有服务端实时快照接入和 Agent 实时采集入口
-- 当前数据库仍是内存演示仓储，后续要切正式数据库
+- 服务端已切到 SQLite 持久化
 - Python 版本保留，继续作为现场 PoC 和点位验证工具
 
 ## 下一步建议
 
-1. 把服务端仓储切到正式数据库
-2. 把 Agent 的断线补传、本地缓存和历史沉淀补齐
+1. 把 Agent 的断线补传、本地缓存和历史沉淀补齐
+2. 做服务端数据库 provider 扩展，再评估 SQL Server / MySQL 接入
 3. 把更多 FANUC 原生点位接进正式版日报和时间线
 4. 形成机型模板和口径模板，再扩到全车间

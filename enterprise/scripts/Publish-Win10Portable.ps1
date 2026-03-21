@@ -66,14 +66,14 @@ foreach ($target in $publishTargets) {
 $serverBat = @"
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0server"
 start "DataCollector Server" "%~dp0server\DataCollector.Server.Api.exe"
 "@
 
 $clientBat = @"
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0client"
 set DATACOLLECTOR_API_URL=http://localhost:5180
 start "DataCollector Client" "%~dp0client\DataCollector.Desktop.Wpf.exe"
 "@
@@ -81,16 +81,17 @@ start "DataCollector Client" "%~dp0client\DataCollector.Desktop.Wpf.exe"
 $agentBat = @"
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0agent"
 start "DataCollector Agent" "%~dp0agent\DataCollector.Agent.Worker.exe"
 "@
 
 $allBat = @"
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0server"
 start "DataCollector Server" "%~dp0server\DataCollector.Server.Api.exe"
 timeout /t 3 /nobreak >nul
+cd /d "%~dp0client"
 set DATACOLLECTOR_API_URL=http://localhost:5180
 start "DataCollector Client" "%~dp0client\DataCollector.Desktop.Wpf.exe"
 "@
@@ -115,8 +116,27 @@ DataCollector Enterprise Win10 Runtime Notes
    If the Win10 machine does not have dotnet, do not run this script there.
    Run it on the development machine and copy dist\$Runtime afterward.
 
-5. The current enterprise build starts with an empty device list.
+5. The server uses SQLite persistence by default.
+   The database file will be created automatically under:
+   server\data\enterprise.db
+
+6. The current enterprise build starts with an empty device list.
    Add departments, workshops and machines from the client before testing live collection.
+
+7. Agent setup basics:
+   - Edit agent\appsettings.json
+   - AgentNodeName must match the device's Agent node in the client
+   - Machines[].DeviceCode must exactly match the device code in the client
+   - Machines[].IpAddress and Port must match the real CNC
+   - UploadEndpoint should normally be:
+     http://localhost:5180/api/ingestion/snapshots
+
+8. If the CNC can be pinged but the enterprise client still shows offline, check:
+   - Start-EnterpriseAgent.bat was actually started
+   - agent\appsettings.json has the correct DeviceCode
+   - AgentNodeName matches the device archive
+   - the device is enabled in the client
+   - the agent log reports no unknown/mismatch device codes
 "@
 
 Set-Content -Path (Join-Path $activeOutputRoot "Start-EnterpriseServer.bat") -Value $serverBat -Encoding Ascii

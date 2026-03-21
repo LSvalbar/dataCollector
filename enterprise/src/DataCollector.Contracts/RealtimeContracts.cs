@@ -51,3 +51,16 @@ public sealed class MachineRealtimeBatchDto
 
     public required IReadOnlyList<MachineRealtimeSnapshotDto> Snapshots { get; set; }
 }
+
+public sealed class MachineRealtimeIngestionResultDto
+{
+    public int AcceptedSnapshots { get; set; }
+
+    public required IReadOnlyList<string> UnknownDeviceCodes { get; set; }
+
+    public required IReadOnlyList<string> AgentNodeMismatchDeviceCodes { get; set; }
+
+    public required IReadOnlyList<string> DisabledDeviceCodes { get; set; }
+
+    public DateTimeOffset ProcessedAt { get; set; }
+}

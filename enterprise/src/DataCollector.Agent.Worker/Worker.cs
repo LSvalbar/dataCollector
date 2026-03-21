@@ -26,6 +26,11 @@ public sealed class Worker : BackgroundService
             _sessions.Add(new FanucMachineSession(machine, _logger));
         }
 
+        if (_sessions.Count == 0)
+        {
+            _logger.LogWarning("Agent 当前没有启用任何机床配置，请先编辑 appsettings.json 中的 Agent:Machines。");
+        }
+
         _logger.LogInformation(
             "Agent {AgentNodeName} 已启动，车间 {WorkshopCode}，设备数量 {MachineCount}，轮询周期 {PollInterval}ms，本地缓存 {CachePath}",
             _options.AgentNodeName,
@@ -45,8 +50,34 @@ public sealed class Worker : BackgroundService
 
             try
             {
-                await _ingestionClient.PushAsync(snapshots, stoppingToken);
-                _logger.LogInformation("Pushed {Count} realtime snapshots to {UploadEndpoint}", snapshots.Count, _options.UploadEndpoint);
+                var result = await _ingestionClient.PushAsync(snapshots, stoppingToken);
+                _logger.LogInformation(
+                    "Pushed realtime snapshots to {UploadEndpoint}, accepted {Accepted}/{Count}, processed at {ProcessedAt}",
+                    _options.UploadEndpoint,
+                    result.AcceptedSnapshots,
+                    snapshots.Count,
+                    result.ProcessedAt);
+
+                if (result.UnknownDeviceCodes.Count > 0)
+                {
+                    _logger.LogWarning(
+                        "以下设备编码在服务端不存在，已忽略：{DeviceCodes}。请检查客户端设备编码和 Agent 配置的 DeviceCode 是否完全一致。",
+                        string.Join(", ", result.UnknownDeviceCodes));
+                }
+
+                if (result.AgentNodeMismatchDeviceCodes.Count > 0)
+                {
+                    _logger.LogWarning(
+                        "以下设备编码的 Agent 节点不匹配，已忽略：{DeviceCodes}。请检查服务端设备档案中的 Agent 节点和当前 AgentNodeName 是否一致。",
+                        string.Join(", ", result.AgentNodeMismatchDeviceCodes));
+                }
+
+                if (result.DisabledDeviceCodes.Count > 0)
+                {
+                    _logger.LogWarning(
+                        "以下设备在服务端被禁用，实时快照未入库：{DeviceCodes}。",
+                        string.Join(", ", result.DisabledDeviceCodes));
+                }
             }
             catch (Exception exception)
             {
