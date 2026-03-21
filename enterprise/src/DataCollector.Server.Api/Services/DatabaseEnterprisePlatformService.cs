@@ -208,10 +208,7 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             .ThenBy(device => device.WorkshopCode)
             .ThenBy(device => device.DeviceCode)
             .ToListAsync(cancellationToken);
-        var formulas = await dbContext.Formulas
-            .AsNoTracking()
-            .OrderBy(formula => formula.Code)
-            .ToListAsync(cancellationToken);
+        var formulas = await EnsureRequiredFormulasAsync(dbContext, cancellationToken);
         var timelineSegments = await dbContext.TimelineSegments
             .AsNoTracking()
             .Where(segment => segment.ReportDateKey == reportDateKey)
@@ -221,8 +218,8 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             .GroupBy(segment => segment.DeviceId)
             .ToDictionary(group => group.Key, group => group.ToList());
 
-        var powerOnFormula = formulas.First(formula => formula.Code == "power_on_rate");
-        var utilizationFormula = formulas.First(formula => formula.Code == "utilization_rate");
+        var powerOnFormula = formulas.First(formula => formula.Code == DefaultFormulaCatalog.PowerOnRateCode);
+        var utilizationFormula = formulas.First(formula => formula.Code == DefaultFormulaCatalog.UtilizationRateCode);
         var rows = new List<DailyReportRowDto>(devices.Count);
 
         foreach (var device in devices)
@@ -249,8 +246,8 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
                 AlarmMinutes = metrics.AlarmMinutes,
                 EmergencyMinutes = metrics.EmergencyMinutes,
                 CommunicationInterruptedMinutes = metrics.CommunicationInterruptedMinutes,
-                PowerOnRate = _formulaEngine.Evaluate(powerOnFormula.Expression, variables),
-                UtilizationRate = _formulaEngine.Evaluate(utilizationFormula.Expression, variables),
+                PowerOnRate = EvaluateFormulaWithFallback(powerOnFormula.Expression, DefaultFormulaCatalog.PowerOnRateExpression, variables),
+                UtilizationRate = EvaluateFormulaWithFallback(utilizationFormula.Expression, DefaultFormulaCatalog.UtilizationRateExpression, variables),
                 CurrentState = runtimeDevice.CurrentState,
                 DataQualityCode = segments.Count > 0 ? segments[^1].DataQualityCode : "not_collected",
             });
@@ -268,8 +265,7 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
     public async Task<IReadOnlyList<FormulaDefinitionDto>> GetFormulasAsync(CancellationToken cancellationToken)
     {
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-        return await dbContext.Formulas
-            .AsNoTracking()
+        return (await EnsureRequiredFormulasAsync(dbContext, cancellationToken))
             .OrderBy(formula => formula.Code)
             .Select(formula => new FormulaDefinitionDto
             {
@@ -281,7 +277,40 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
                 UpdatedAt = formula.UpdatedAt,
                 UpdatedBy = formula.UpdatedBy,
             })
-            .ToArrayAsync(cancellationToken);
+            .ToArray();
+    }
+
+    private async Task<List<FormulaEntity>> EnsureRequiredFormulasAsync(EnterpriseDbContext dbContext, CancellationToken cancellationToken)
+    {
+        var formulas = await dbContext.Formulas
+            .AsNoTracking()
+            .OrderBy(formula => formula.Code)
+            .ToListAsync(cancellationToken);
+
+        var now = _timeProvider.GetLocalNow();
+        var missingDefaults = new List<FormulaEntity>();
+
+        if (!formulas.Any(item => item.Code == DefaultFormulaCatalog.PowerOnRateCode))
+        {
+            missingDefaults.Add(DefaultFormulaCatalog.CreatePowerOnRate(now));
+        }
+
+        if (!formulas.Any(item => item.Code == DefaultFormulaCatalog.UtilizationRateCode))
+        {
+            missingDefaults.Add(DefaultFormulaCatalog.CreateUtilizationRate(now));
+        }
+
+        if (missingDefaults.Count > 0)
+        {
+            await dbContext.Formulas.AddRangeAsync(missingDefaults, cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            formulas = await dbContext.Formulas
+                .AsNoTracking()
+                .OrderBy(formula => formula.Code)
+                .ToListAsync(cancellationToken);
+        }
+
+        return formulas;
     }
 
     public Task<IReadOnlyList<FormulaVariableOptionDto>> GetFormulaVariableOptionsAsync(CancellationToken cancellationToken)
@@ -848,5 +877,17 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
     {
         var bytes = address.GetAddressBytes();
         return $"{bytes[0]}.{bytes[1]}.{bytes[2]}";
+    }
+
+    private double EvaluateFormulaWithFallback(string expression, string fallbackExpression, IReadOnlyDictionary<string, double> variables)
+    {
+        try
+        {
+            return _formulaEngine.Evaluate(expression, variables);
+        }
+        catch
+        {
+            return _formulaEngine.Evaluate(fallbackExpression, variables);
+        }
     }
 }

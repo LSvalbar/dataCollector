@@ -43,6 +43,7 @@ public partial class MainWindow : Window
             new Dictionary<string, string>
             {
                 ["DATACOLLECTOR_API_URL"] = ServerBaseUrlTextBox.Text.Trim(),
+                ["DATACOLLECTOR_AGENT_NODE"] = AgentNodeNameTextBox.Text.Trim(),
             });
     }
 

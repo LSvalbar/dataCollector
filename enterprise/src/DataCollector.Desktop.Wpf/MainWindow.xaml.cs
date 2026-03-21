@@ -684,7 +684,7 @@ public partial class MainWindow : Window
             ProtocolName = "FOCAS over Ethernet",
             IpAddress = string.Empty,
             Port = 8193,
-            AgentNodeName = string.Empty,
+            AgentNodeName = GetDefaultAgentNodeName(),
             ResponsiblePerson = string.Empty,
             IsEnabled = true,
         };
@@ -741,10 +741,16 @@ public partial class MainWindow : Window
     {
         return _devices
             .Select(device => device.AgentNodeName)
+            .Append(GetDefaultAgentNodeName())
             .Where(agentNode => !string.IsNullOrWhiteSpace(agentNode))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(agentNode => agentNode, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static string GetDefaultAgentNodeName()
+    {
+        return Environment.GetEnvironmentVariable("DATACOLLECTOR_AGENT_NODE")?.Trim() ?? string.Empty;
     }
 
     private static T? FindAncestor<T>(DependencyObject? source) where T : DependencyObject

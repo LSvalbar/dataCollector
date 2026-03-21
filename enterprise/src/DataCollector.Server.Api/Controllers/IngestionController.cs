@@ -18,7 +18,14 @@ public sealed class IngestionController : ControllerBase
     [HttpPost("snapshots")]
     public async Task<ActionResult<MachineRealtimeIngestionResultDto>> IngestSnapshots([FromBody] MachineRealtimeBatchDto batch, CancellationToken cancellationToken)
     {
-        var result = await _realtimeIngestionService.IngestAsync(batch, cancellationToken);
-        return Accepted(result);
+        try
+        {
+            var result = await _realtimeIngestionService.IngestAsync(batch, cancellationToken);
+            return Accepted(result);
+        }
+        catch (Exception exception)
+        {
+            return Problem(title: "实时快照入库失败", detail: exception.Message, statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 }

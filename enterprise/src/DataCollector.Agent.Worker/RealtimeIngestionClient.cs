@@ -37,7 +37,13 @@ internal sealed class RealtimeIngestionClient
             },
             cancellationToken);
 
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var message = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new InvalidOperationException(
+                $"实时快照上传失败：{(string.IsNullOrWhiteSpace(message) ? response.ReasonPhrase : message.Trim())}");
+        }
+
         return await response.Content.ReadFromJsonAsync<MachineRealtimeIngestionResultDto>(cancellationToken)
             ?? new MachineRealtimeIngestionResultDto
             {

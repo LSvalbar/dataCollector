@@ -37,22 +37,22 @@ public sealed class EnterpriseApiClient : IDisposable
 
     public Task<DeviceManagementOverviewDto?> GetOverviewAsync(CancellationToken cancellationToken = default)
     {
-        return _httpClient.GetFromJsonAsync<DeviceManagementOverviewDto>("/api/device-management/overview", cancellationToken);
+        return GetJsonAsync<DeviceManagementOverviewDto>("/api/device-management/overview", cancellationToken);
     }
 
     public Task<DailyReportResponse?> GetDailyReportAsync(DateOnly date, CancellationToken cancellationToken = default)
     {
-        return _httpClient.GetFromJsonAsync<DailyReportResponse>($"/api/reports/daily?date={date:yyyy-MM-dd}", cancellationToken);
+        return GetJsonAsync<DailyReportResponse>($"/api/reports/daily?date={date:yyyy-MM-dd}", cancellationToken);
     }
 
     public Task<IReadOnlyList<FormulaDefinitionDto>?> GetFormulasAsync(CancellationToken cancellationToken = default)
     {
-        return _httpClient.GetFromJsonAsync<IReadOnlyList<FormulaDefinitionDto>>("/api/reports/formulas", cancellationToken);
+        return GetJsonAsync<IReadOnlyList<FormulaDefinitionDto>>("/api/reports/formulas", cancellationToken);
     }
 
     public Task<IReadOnlyList<FormulaVariableOptionDto>?> GetFormulaOptionsAsync(CancellationToken cancellationToken = default)
     {
-        return _httpClient.GetFromJsonAsync<IReadOnlyList<FormulaVariableOptionDto>>("/api/reports/formula-options", cancellationToken);
+        return GetJsonAsync<IReadOnlyList<FormulaVariableOptionDto>>("/api/reports/formula-options", cancellationToken);
     }
 
     public async Task<FormulaDefinitionDto?> UpdateFormulaAsync(string code, FormulaUpdateRequest request, CancellationToken cancellationToken = default)
@@ -64,12 +64,12 @@ public sealed class EnterpriseApiClient : IDisposable
 
     public Task<DeviceTimelineResponse?> GetTimelineAsync(Guid deviceId, DateOnly date, CancellationToken cancellationToken = default)
     {
-        return _httpClient.GetFromJsonAsync<DeviceTimelineResponse>($"/api/timeline/devices/{deviceId}?date={date:yyyy-MM-dd}", cancellationToken);
+        return GetJsonAsync<DeviceTimelineResponse>($"/api/timeline/devices/{deviceId}?date={date:yyyy-MM-dd}", cancellationToken);
     }
 
     public Task<SecurityOverviewDto?> GetSecurityOverviewAsync(CancellationToken cancellationToken = default)
     {
-        return _httpClient.GetFromJsonAsync<SecurityOverviewDto>("/api/security/overview", cancellationToken);
+        return GetJsonAsync<SecurityOverviewDto>("/api/security/overview", cancellationToken);
     }
 
     public async Task<UserDto?> SaveUserAsync(UserUpsertRequest request, CancellationToken cancellationToken = default)
@@ -165,5 +165,12 @@ public sealed class EnterpriseApiClient : IDisposable
         }
 
         throw new InvalidOperationException(message.Trim().Trim('"'));
+    }
+
+    private async Task<T?> GetJsonAsync<T>(string requestUri, CancellationToken cancellationToken)
+    {
+        using var response = await _httpClient.GetAsync(requestUri, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<T>(cancellationToken);
     }
 }

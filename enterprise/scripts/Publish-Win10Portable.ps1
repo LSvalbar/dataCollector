@@ -68,6 +68,12 @@ $publishTargets = @(
 )
 
 foreach ($target in $publishTargets) {
+    dotnet restore $target.Project -r $target.Runtime
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet restore failed for $($target.Name)"
+    }
+
     dotnet publish $target.Project `
         -c $Configuration `
         -r $target.Runtime `

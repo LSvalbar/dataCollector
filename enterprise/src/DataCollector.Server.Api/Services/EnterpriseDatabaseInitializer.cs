@@ -1,4 +1,5 @@
 using DataCollector.Server.Api.Persistence;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace DataCollector.Server.Api.Services;
@@ -8,15 +9,18 @@ public sealed class EnterpriseDatabaseInitializer
     private readonly IDbContextFactory<EnterpriseDbContext> _dbContextFactory;
     private readonly TimeProvider _timeProvider;
     private readonly ResolvedPersistenceOptions _persistenceOptions;
+    private readonly ILogger<EnterpriseDatabaseInitializer> _logger;
 
     public EnterpriseDatabaseInitializer(
         IDbContextFactory<EnterpriseDbContext> dbContextFactory,
         TimeProvider timeProvider,
-        ResolvedPersistenceOptions persistenceOptions)
+        ResolvedPersistenceOptions persistenceOptions,
+        ILogger<EnterpriseDatabaseInitializer> logger)
     {
         _dbContextFactory = dbContextFactory;
         _timeProvider = timeProvider;
         _persistenceOptions = persistenceOptions;
+        _logger = logger;
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken)
@@ -26,38 +30,105 @@ public sealed class EnterpriseDatabaseInitializer
             return;
         }
 
+        await EnsureCompatibleDatabaseAsync(cancellationToken);
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
         await SeedDefaultsAsync(dbContext, cancellationToken);
+    }
+
+    private async Task EnsureCompatibleDatabaseAsync(CancellationToken cancellationToken)
+    {
+        if (!File.Exists(_persistenceOptions.DatabasePath))
+        {
+            return;
+        }
+
+        await using var connection = new SqliteConnection(_persistenceOptions.ConnectionString);
+        await connection.OpenAsync(cancellationToken);
+        if (await IsSchemaCompatibleAsync(connection, cancellationToken))
+        {
+            return;
+        }
+
+        await connection.CloseAsync();
+        var backupPath = $"{_persistenceOptions.DatabasePath}.bak-{DateTime.Now:yyyyMMddHHmmss}";
+        File.Copy(_persistenceOptions.DatabasePath, backupPath, overwrite: true);
+        File.Delete(_persistenceOptions.DatabasePath);
+        _logger.LogWarning("检测到旧版或不兼容数据库结构，已备份到 {BackupPath} 并重建新库。", backupPath);
+    }
+
+    private static async Task<bool> IsSchemaCompatibleAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var requiredSchema = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["devices"] =
+            [
+                "DeviceId", "DepartmentCode", "DepartmentName", "WorkshopCode", "WorkshopName",
+                "DeviceCode", "DeviceName", "Manufacturer", "ControllerModel", "ProtocolName",
+                "IpAddress", "Port", "AgentNodeName", "ResponsiblePerson", "CurrentState",
+                "HealthLevel", "IsEnabled", "MachineOnline", "LastHeartbeatAt", "LastCollectedAt",
+                "CurrentProgramNo", "CurrentProgramName", "SpindleSpeedRpm", "SpindleLoadPercent",
+                "AutomaticMode", "OperationMode", "AlarmState", "EmergencyState", "ControllerModeText",
+                "OeeStatusText", "NativePowerOnTotalMs", "NativeOperatingTotalMs", "NativeCuttingTotalMs",
+                "NativeFreeTotalMs", "DataQualityCode", "LastCollectionError"
+            ],
+            ["formulas"] = ["Code", "DisplayName", "Description", "Expression", "ResultUnit", "UpdatedBy", "UpdatedAt"],
+            ["users"] = ["UserCode", "UserName", "DisplayName", "Department", "IsEnabled", "LastLoginAt"],
+            ["roles"] = ["RoleCode", "RoleName", "Description"],
+            ["user_roles"] = ["UserCode", "RoleCode"],
+            ["role_permissions"] = ["RoleCode", "PermissionCode"],
+            ["timeline_segments"] = ["TimelineSegmentId", "DeviceId", "ReportDateKey", "State", "StartAt", "EndAt", "DurationMinutes", "DataQualityCode"],
+        };
+
+        foreach (var table in requiredSchema)
+        {
+            var columns = await ReadColumnNamesAsync(connection, table.Key, cancellationToken);
+            if (columns.Count == 0)
+            {
+                return false;
+            }
+
+            if (table.Value.Any(requiredColumn => !columns.Contains(requiredColumn)))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static async Task<HashSet<string>> ReadColumnNamesAsync(SqliteConnection connection, string tableName, CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        var escapedTableName = tableName.Replace("'", "''");
+        command.CommandText = $"PRAGMA table_info('{escapedTableName}')";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            if (!reader.IsDBNull(1))
+            {
+                columns.Add(reader.GetString(1));
+            }
+        }
+
+        return columns;
     }
 
     private async Task SeedDefaultsAsync(EnterpriseDbContext dbContext, CancellationToken cancellationToken)
     {
         var now = _timeProvider.GetLocalNow();
 
-        if (!await dbContext.Formulas.AnyAsync(cancellationToken))
+        var formulas = await dbContext.Formulas.ToDictionaryAsync(item => item.Code, StringComparer.OrdinalIgnoreCase, cancellationToken);
+        if (!formulas.ContainsKey(DefaultFormulaCatalog.PowerOnRateCode))
         {
-            dbContext.Formulas.AddRange(
-                new FormulaEntity
-                {
-                    Code = "power_on_rate",
-                    DisplayName = "开机率",
-                    Description = "默认按当天已观测时长计算开机率。",
-                    Expression = "(开机时间 / 已观测时间) * 100",
-                    ResultUnit = "%",
-                    UpdatedAt = now,
-                    UpdatedBy = "system",
-                },
-                new FormulaEntity
-                {
-                    Code = "utilization_rate",
-                    DisplayName = "利用率",
-                    Description = "默认按开机时间中的加工占比计算利用率。",
-                    Expression = "(加工时间 / 开机时间) * 100",
-                    ResultUnit = "%",
-                    UpdatedAt = now,
-                    UpdatedBy = "system",
-                });
+            dbContext.Formulas.Add(DefaultFormulaCatalog.CreatePowerOnRate(now));
+        }
+
+        if (!formulas.ContainsKey(DefaultFormulaCatalog.UtilizationRateCode))
+        {
+            dbContext.Formulas.Add(DefaultFormulaCatalog.CreateUtilizationRate(now));
         }
 
         if (!await dbContext.Roles.AnyAsync(cancellationToken))

@@ -16,22 +16,43 @@ public sealed class ReportsController : ControllerBase
     }
 
     [HttpGet("daily")]
-    public Task<DailyReportResponse> GetDailyReport([FromQuery] DateOnly? date, CancellationToken cancellationToken)
+    public async Task<ActionResult<DailyReportResponse>> GetDailyReport([FromQuery] DateOnly? date, CancellationToken cancellationToken)
     {
         var reportDate = date ?? DateOnly.FromDateTime(DateTime.Now);
-        return _platformService.GetDailyReportAsync(reportDate, cancellationToken);
+        try
+        {
+            return await _platformService.GetDailyReportAsync(reportDate, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            return Problem(title: "报表刷新失败", detail: exception.Message, statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 
     [HttpGet("formulas")]
-    public Task<IReadOnlyList<FormulaDefinitionDto>> GetFormulas(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<FormulaDefinitionDto>>> GetFormulas(CancellationToken cancellationToken)
     {
-        return _platformService.GetFormulasAsync(cancellationToken);
+        try
+        {
+            return Ok(await _platformService.GetFormulasAsync(cancellationToken));
+        }
+        catch (Exception exception)
+        {
+            return Problem(title: "公式查询失败", detail: exception.Message, statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 
     [HttpGet("formula-options")]
-    public Task<IReadOnlyList<FormulaVariableOptionDto>> GetFormulaOptions(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<FormulaVariableOptionDto>>> GetFormulaOptions(CancellationToken cancellationToken)
     {
-        return _platformService.GetFormulaVariableOptionsAsync(cancellationToken);
+        try
+        {
+            return Ok(await _platformService.GetFormulaVariableOptionsAsync(cancellationToken));
+        }
+        catch (Exception exception)
+        {
+            return Problem(title: "公式选项查询失败", detail: exception.Message, statusCode: StatusCodes.Status500InternalServerError);
+        }
     }
 
     [HttpPut("formulas/{code}")]
