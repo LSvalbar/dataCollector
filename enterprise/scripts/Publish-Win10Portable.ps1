@@ -8,6 +8,7 @@ $ErrorActionPreference = "Stop"
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $enterpriseRoot = Split-Path -Parent $scriptRoot
 $outputRoot = Join-Path $enterpriseRoot "dist\$Runtime"
+$activeOutputRoot = $outputRoot
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     Write-Host "dotnet SDK was not found on this machine." -ForegroundColor Yellow
@@ -19,10 +20,17 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
 Write-Host "Publishing enterprise package to $outputRoot" -ForegroundColor Cyan
 
 if (Test-Path $outputRoot) {
-    Remove-Item -Recurse -Force $outputRoot
+    try {
+        Remove-Item -Recurse -Force $outputRoot
+    }
+    catch {
+        $suffix = Get-Date -Format "yyyyMMddHHmmss"
+        $activeOutputRoot = Join-Path $enterpriseRoot "dist\$Runtime-$suffix"
+        Write-Host "Default output folder is locked. Publishing to $activeOutputRoot instead." -ForegroundColor Yellow
+    }
 }
 
-New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $activeOutputRoot | Out-Null
 
 $publishTargets = @(
     @{
@@ -43,7 +51,7 @@ $publishTargets = @(
 )
 
 foreach ($target in $publishTargets) {
-    $targetOutput = Join-Path $outputRoot $target.Name
+    $targetOutput = Join-Path $activeOutputRoot $target.Name
     dotnet publish $target.Project `
         -c $Configuration `
         -r $target.Runtime `
@@ -107,14 +115,14 @@ DataCollector Enterprise Win10 Runtime Notes
    If the Win10 machine does not have dotnet, do not run this script there.
    Run it on the development machine and copy dist\$Runtime afterward.
 
-5. The current enterprise build uses seeded demo data for architecture and UI review.
-   Real FANUC machine collection still requires the next step: C# Agent + FOCAS + production database.
+5. The current enterprise build starts with an empty device list.
+   Add departments, workshops and machines from the client before testing live collection.
 "@
 
-Set-Content -Path (Join-Path $outputRoot "Start-EnterpriseServer.bat") -Value $serverBat -Encoding Ascii
-Set-Content -Path (Join-Path $outputRoot "Start-EnterpriseClient.bat") -Value $clientBat -Encoding Ascii
-Set-Content -Path (Join-Path $outputRoot "Start-EnterpriseAgent.bat") -Value $agentBat -Encoding Ascii
-Set-Content -Path (Join-Path $outputRoot "Start-Enterprise-All.bat") -Value $allBat -Encoding Ascii
-Set-Content -Path (Join-Path $outputRoot "README-Win10.txt") -Value $runbook -Encoding Ascii
+Set-Content -Path (Join-Path $activeOutputRoot "Start-EnterpriseServer.bat") -Value $serverBat -Encoding Ascii
+Set-Content -Path (Join-Path $activeOutputRoot "Start-EnterpriseClient.bat") -Value $clientBat -Encoding Ascii
+Set-Content -Path (Join-Path $activeOutputRoot "Start-EnterpriseAgent.bat") -Value $agentBat -Encoding Ascii
+Set-Content -Path (Join-Path $activeOutputRoot "Start-Enterprise-All.bat") -Value $allBat -Encoding Ascii
+Set-Content -Path (Join-Path $activeOutputRoot "README-Win10.txt") -Value $runbook -Encoding Ascii
 
-Write-Host "Portable package ready: $outputRoot" -ForegroundColor Green
+Write-Host "Portable package ready: $activeOutputRoot" -ForegroundColor Green

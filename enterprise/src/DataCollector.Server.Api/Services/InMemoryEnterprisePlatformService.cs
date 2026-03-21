@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using DataCollector.Contracts;
 using DataCollector.Core;
 using DataCollector.Core.Formula;
@@ -6,15 +8,6 @@ namespace DataCollector.Server.Api.Services;
 
 public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformService
 {
-    private static readonly (string DepartmentCode, string DepartmentName, string WorkshopCode, string WorkshopName)[] WorkshopSeed =
-    [
-        ("D01", "机械加工部", "W01", "一车间"),
-        ("D01", "机械加工部", "W02", "二车间"),
-        ("D01", "机械加工部", "W03", "三车间"),
-        ("D02", "精密制造部", "W04", "四车间"),
-        ("D02", "精密制造部", "W05", "五车间"),
-    ];
-
     private readonly object _gate = new();
     private readonly FormulaEngine _formulaEngine;
     private readonly DailyMetricsCalculator _dailyMetricsCalculator;
@@ -34,8 +27,8 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
         _dailyMetricsCalculator = dailyMetricsCalculator;
         _liveDeviceStateStore = liveDeviceStateStore;
         _timeProvider = timeProvider;
-        _devices = BuildSeedDevices();
-        _formulas = BuildSeedFormulas();
+        _devices = [];
+        _formulas = BuildDefaultFormulas();
         _securityOverview = BuildSecurityOverview();
     }
 
@@ -44,9 +37,10 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
         cancellationToken.ThrowIfCancellationRequested();
         var snapshotAt = _timeProvider.GetLocalNow();
         var devices = BuildDeviceSnapshots(snapshotAt);
+
         var workshops = devices
             .GroupBy(device => new { device.WorkshopCode, device.WorkshopName })
-            .OrderBy(group => group.Key.WorkshopCode)
+            .OrderBy(group => group.Key.WorkshopCode, StringComparer.OrdinalIgnoreCase)
             .Select(group => new WorkshopSummaryDto
             {
                 WorkshopCode = group.Key.WorkshopCode,
@@ -75,6 +69,8 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
+        ValidateRequest(request);
+
         lock (_gate)
         {
             var now = _timeProvider.GetLocalNow();
@@ -82,48 +78,54 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                 ? _devices.FirstOrDefault(device => device.DeviceId == request.DeviceId.Value)
                 : null;
 
+            ValidateAgentNetwork(request, existing?.DeviceId);
+            ValidateDeviceCodeUniqueness(request, existing?.DeviceId);
+
             if (existing is null)
             {
                 existing = new DeviceDto
                 {
                     DeviceId = request.DeviceId ?? Guid.NewGuid(),
-                    DepartmentCode = request.DepartmentCode,
-                    DepartmentName = request.DepartmentName,
-                    WorkshopCode = request.WorkshopCode,
-                    WorkshopName = request.WorkshopName,
-                    DeviceCode = request.DeviceCode,
-                    DeviceName = request.DeviceName,
-                    Manufacturer = request.Manufacturer,
-                    ControllerModel = request.ControllerModel,
-                    ProtocolName = request.ProtocolName,
-                    IpAddress = request.IpAddress,
+                    DepartmentCode = request.DepartmentCode.Trim(),
+                    DepartmentName = request.DepartmentName.Trim(),
+                    WorkshopCode = request.WorkshopCode.Trim(),
+                    WorkshopName = request.WorkshopName.Trim(),
+                    DeviceCode = request.DeviceCode.Trim(),
+                    DeviceName = request.DeviceName.Trim(),
+                    Manufacturer = request.Manufacturer.Trim(),
+                    ControllerModel = request.ControllerModel.Trim(),
+                    ProtocolName = request.ProtocolName.Trim(),
+                    IpAddress = request.IpAddress.Trim(),
                     Port = request.Port,
-                    AgentNodeName = request.AgentNodeName,
-                    CurrentState = MachineOperationalState.Standby,
-                    HealthLevel = DeviceHealthLevel.Normal,
+                    AgentNodeName = request.AgentNodeName.Trim(),
+                    CurrentState = request.IsEnabled ? MachineOperationalState.CommunicationInterrupted : MachineOperationalState.PowerOff,
+                    HealthLevel = request.IsEnabled ? DeviceHealthLevel.Warning : DeviceHealthLevel.Normal,
                     IsEnabled = request.IsEnabled,
+                    MachineOnline = false,
                     LastHeartbeatAt = now,
-                    CurrentProgramNo = "O0001",
-                    CurrentProgramName = "新设备默认程序",
+                    DataQualityCode = "not_collected",
                 };
                 _devices.Add(existing);
             }
             else
             {
-                existing.DepartmentCode = request.DepartmentCode;
-                existing.DepartmentName = request.DepartmentName;
-                existing.WorkshopCode = request.WorkshopCode;
-                existing.WorkshopName = request.WorkshopName;
-                existing.DeviceCode = request.DeviceCode;
-                existing.DeviceName = request.DeviceName;
-                existing.Manufacturer = request.Manufacturer;
-                existing.ControllerModel = request.ControllerModel;
-                existing.ProtocolName = request.ProtocolName;
-                existing.IpAddress = request.IpAddress;
+                existing.DepartmentCode = request.DepartmentCode.Trim();
+                existing.DepartmentName = request.DepartmentName.Trim();
+                existing.WorkshopCode = request.WorkshopCode.Trim();
+                existing.WorkshopName = request.WorkshopName.Trim();
+                existing.DeviceCode = request.DeviceCode.Trim();
+                existing.DeviceName = request.DeviceName.Trim();
+                existing.Manufacturer = request.Manufacturer.Trim();
+                existing.ControllerModel = request.ControllerModel.Trim();
+                existing.ProtocolName = request.ProtocolName.Trim();
+                existing.IpAddress = request.IpAddress.Trim();
                 existing.Port = request.Port;
-                existing.AgentNodeName = request.AgentNodeName;
+                existing.AgentNodeName = request.AgentNodeName.Trim();
                 existing.IsEnabled = request.IsEnabled;
-                existing.LastHeartbeatAt = now;
+                existing.CurrentState = request.IsEnabled ? existing.CurrentState : MachineOperationalState.PowerOff;
+                existing.MachineOnline = request.IsEnabled && existing.MachineOnline;
+                existing.HealthLevel = request.IsEnabled ? existing.HealthLevel : DeviceHealthLevel.Normal;
+                existing.DataQualityCode ??= request.IsEnabled ? "not_collected" : "manual_disabled";
             }
 
             return Task.FromResult(CloneDevice(existing));
@@ -133,6 +135,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
     public Task DeleteDeviceAsync(Guid deviceId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
         lock (_gate)
         {
             var existing = _devices.FirstOrDefault(device => device.DeviceId == deviceId);
@@ -145,25 +148,93 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
         return Task.CompletedTask;
     }
 
+    public Task RenameDepartmentAsync(string departmentCode, string newName, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentException.ThrowIfNullOrWhiteSpace(departmentCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(newName);
+
+        lock (_gate)
+        {
+            var devices = _devices.Where(device => device.DepartmentCode.Equals(departmentCode, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (devices.Count == 0)
+            {
+                throw new KeyNotFoundException($"未找到部门 {departmentCode}。");
+            }
+
+            foreach (var device in devices)
+            {
+                device.DepartmentName = newName.Trim();
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task RenameWorkshopAsync(string workshopCode, string newName, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentException.ThrowIfNullOrWhiteSpace(workshopCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(newName);
+
+        lock (_gate)
+        {
+            var devices = _devices.Where(device => device.WorkshopCode.Equals(workshopCode, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (devices.Count == 0)
+            {
+                throw new KeyNotFoundException($"未找到车间 {workshopCode}。");
+            }
+
+            foreach (var device in devices)
+            {
+                device.WorkshopName = newName.Trim();
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task RenameDeviceAsync(Guid deviceId, string newName, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentException.ThrowIfNullOrWhiteSpace(newName);
+
+        lock (_gate)
+        {
+            var device = _devices.FirstOrDefault(item => item.DeviceId == deviceId)
+                ?? throw new KeyNotFoundException($"未找到设备 {deviceId}。");
+            device.DeviceName = newName.Trim();
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task<DailyReportResponse> GetDailyReportAsync(DateOnly reportDate, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
         var now = _timeProvider.GetLocalNow();
         var devices = BuildDeviceSnapshots(now);
-        var formulas = _formulas.Values.OrderBy(formula => formula.Code).Select(CloneFormula).ToArray();
+        var formulas = _formulas.Values
+            .OrderBy(formula => formula.Code, StringComparer.OrdinalIgnoreCase)
+            .Select(CloneFormula)
+            .ToArray();
         var powerOnFormula = _formulas["power_on_rate"];
         var utilizationFormula = _formulas["utilization_rate"];
 
         var rows = devices
-            .OrderBy(device => device.WorkshopCode)
-            .ThenBy(device => device.DeviceCode)
+            .OrderBy(device => device.DepartmentCode, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(device => device.WorkshopCode, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(device => device.DeviceCode, StringComparer.OrdinalIgnoreCase)
             .Select(device =>
             {
                 var timeline = _liveDeviceStateStore.HasTimeline(device.DeviceCode, reportDate)
                     ? _liveDeviceStateStore.GetTimeline(device.DeviceCode, reportDate, now)
-                    : BuildTimeline(device, reportDate, now);
+                    : BuildFallbackTimeline(device, reportDate, now);
+
                 var metrics = _dailyMetricsCalculator.Calculate(timeline);
                 var variables = _formulaEngine.BuildVariableMap(metrics);
+
                 return new DailyReportRowDto
                 {
                     DeviceId = device.DeviceId,
@@ -184,7 +255,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                     CurrentState = device.CurrentState,
                     DataQualityCode = _liveDeviceStateStore.HasTimeline(device.DeviceCode, reportDate)
                         ? "realtime_session"
-                        : "native_timer_first",
+                        : "not_collected",
                 };
             })
             .ToArray();
@@ -202,7 +273,10 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
     {
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult<IReadOnlyList<FormulaDefinitionDto>>(
-            _formulas.Values.OrderBy(formula => formula.Code).Select(CloneFormula).ToArray());
+            _formulas.Values
+                .OrderBy(formula => formula.Code, StringComparer.OrdinalIgnoreCase)
+                .Select(CloneFormula)
+                .ToArray());
     }
 
     public Task<FormulaDefinitionDto> UpdateFormulaAsync(string code, FormulaUpdateRequest request, CancellationToken cancellationToken)
@@ -219,8 +293,8 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                 throw new KeyNotFoundException($"未找到公式 {normalizedCode}。");
             }
 
-            existing.Expression = request.Expression;
-            existing.UpdatedBy = request.UpdatedBy;
+            existing.Expression = request.Expression.Trim();
+            existing.UpdatedBy = request.UpdatedBy.Trim();
             existing.UpdatedAt = _timeProvider.GetLocalNow();
             return Task.FromResult(CloneFormula(existing));
         }
@@ -229,12 +303,13 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
     public Task<DeviceTimelineResponse> GetDeviceTimelineAsync(Guid deviceId, DateOnly reportDate, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+
         var now = _timeProvider.GetLocalNow();
         var device = BuildDeviceSnapshots(now).FirstOrDefault(item => item.DeviceId == deviceId)
             ?? throw new KeyNotFoundException($"未找到设备 {deviceId}。");
         var segments = _liveDeviceStateStore.HasTimeline(device.DeviceCode, reportDate)
             ? _liveDeviceStateStore.GetTimeline(device.DeviceCode, reportDate, now)
-            : BuildTimeline(device, reportDate, now);
+            : BuildFallbackTimeline(device, reportDate, now);
         var metrics = _dailyMetricsCalculator.Calculate(segments);
 
         return Task.FromResult(new DeviceTimelineResponse
@@ -273,21 +348,23 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
             return _devices.Select(device =>
             {
                 var clone = CloneDevice(device);
-                clone.LastHeartbeatAt = now.AddSeconds(-(Math.Abs(device.DeviceCode.GetHashCode()) % 50));
-                clone.CurrentState = ResolveCurrentState(clone, now);
-                clone.MachineOnline = clone.CurrentState != MachineOperationalState.PowerOff;
-                clone.HealthLevel = clone.CurrentState switch
-                {
-                    MachineOperationalState.Alarm or MachineOperationalState.Emergency or MachineOperationalState.CommunicationInterrupted => DeviceHealthLevel.Critical,
-                    MachineOperationalState.PowerOff => DeviceHealthLevel.Warning,
-                    _ => DeviceHealthLevel.Normal,
-                };
-                clone.CurrentProgramNo = clone.CurrentState is MachineOperationalState.Processing or MachineOperationalState.Waiting
-                    ? $"O{Math.Abs(clone.DeviceCode.GetHashCode()) % 9000 + 1000:0000}"
-                    : null;
-                clone.CurrentProgramName = clone.CurrentProgramNo is null ? null : "车削/外圆复合加工";
-                clone.DataQualityCode = "seed_demo";
                 ApplyLiveSnapshot(clone);
+
+                if (clone.LastCollectedAt is null)
+                {
+                    clone.MachineOnline = false;
+                    clone.CurrentState = clone.IsEnabled ? MachineOperationalState.CommunicationInterrupted : MachineOperationalState.PowerOff;
+                    clone.HealthLevel = clone.IsEnabled ? DeviceHealthLevel.Warning : DeviceHealthLevel.Normal;
+                    clone.DataQualityCode ??= clone.IsEnabled ? "not_collected" : "manual_disabled";
+                }
+                else if (!clone.IsEnabled)
+                {
+                    clone.MachineOnline = false;
+                    clone.CurrentState = MachineOperationalState.PowerOff;
+                    clone.HealthLevel = DeviceHealthLevel.Normal;
+                    clone.DataQualityCode = "manual_disabled";
+                }
+
                 return clone;
             }).ToList();
         }
@@ -322,179 +399,153 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
         device.LastCollectionError = snapshot.ErrorMessage;
         device.HealthLevel = snapshot.CurrentState switch
         {
-            MachineOperationalState.Alarm or MachineOperationalState.Emergency or MachineOperationalState.CommunicationInterrupted => DeviceHealthLevel.Critical,
-            MachineOperationalState.PowerOff => DeviceHealthLevel.Warning,
+            MachineOperationalState.Alarm or MachineOperationalState.Emergency => DeviceHealthLevel.Critical,
+            MachineOperationalState.CommunicationInterrupted => DeviceHealthLevel.Warning,
             _ => DeviceHealthLevel.Normal,
         };
     }
 
-    private MachineOperationalState ResolveCurrentState(DeviceDto device, DateTimeOffset now)
+    private IReadOnlyList<TimelineSegmentDto> BuildFallbackTimeline(DeviceDto device, DateOnly reportDate, DateTimeOffset now)
     {
-        if (!device.IsEnabled)
-        {
-            return MachineOperationalState.PowerOff;
-        }
-
-        var today = DateOnly.FromDateTime(now.LocalDateTime);
-        var segment = BuildTimeline(device, today, now).FirstOrDefault(item => item.StartAt <= now && now < item.EndAt);
-        return segment?.State ?? MachineOperationalState.PowerOff;
-    }
-
-    private IReadOnlyList<TimelineSegmentDto> BuildTimeline(DeviceDto device, DateOnly reportDate, DateTimeOffset now)
-    {
-        var offset = now.Offset;
-        var today = DateOnly.FromDateTime(now.LocalDateTime);
-        if (reportDate > today)
+        if (reportDate > DateOnly.FromDateTime(now.LocalDateTime))
         {
             return [];
         }
 
-        var patternIndex = Math.Abs(HashCode.Combine(device.DeviceCode, reportDate.DayNumber)) % 4;
-        var pattern = patternIndex switch
-        {
-            0 => GetPatternA(),
-            1 => GetPatternB(),
-            2 => GetPatternC(),
-            _ => GetPatternD(),
-        };
-
-        var windowEnd = reportDate == today
+        var offset = now.Offset;
+        var startAt = new DateTimeOffset(reportDate.ToDateTime(TimeOnly.MinValue), offset);
+        var endAt = reportDate == DateOnly.FromDateTime(now.LocalDateTime)
             ? now
             : new DateTimeOffset(reportDate.ToDateTime(new TimeOnly(23, 59, 59)), offset);
 
-        var segments = new List<TimelineSegmentDto>();
-        foreach (var entry in pattern)
+        if (endAt <= startAt)
         {
-            var start = new DateTimeOffset(reportDate.ToDateTime(entry.Start), offset);
-            var end = new DateTimeOffset(reportDate.ToDateTime(entry.End), offset);
-            if (end <= start || start >= windowEnd)
-            {
-                continue;
-            }
-
-            if (end > windowEnd)
-            {
-                end = windowEnd;
-            }
-
-            segments.Add(new TimelineSegmentDto
-            {
-                State = entry.State,
-                StartAt = start,
-                EndAt = end,
-                DurationMinutes = Math.Round((end - start).TotalMinutes, 2, MidpointRounding.AwayFromZero),
-                DataQualityCode = entry.State == MachineOperationalState.CommunicationInterrupted ? "network_gap_isolated" : "native_timer_first",
-            });
+            endAt = startAt;
         }
 
-        if (segments.Count == 0)
-        {
-            var start = new DateTimeOffset(reportDate.ToDateTime(TimeOnly.MinValue), offset);
-            segments.Add(new TimelineSegmentDto
+        return
+        [
+            new TimelineSegmentDto
             {
-                State = MachineOperationalState.PowerOff,
-                StartAt = start,
-                EndAt = windowEnd,
-                DurationMinutes = Math.Round((windowEnd - start).TotalMinutes, 2, MidpointRounding.AwayFromZero),
-                DataQualityCode = "native_timer_first",
-            });
-        }
-
-        return MergeAdjacentSegments(segments);
+                State = device.IsEnabled ? MachineOperationalState.CommunicationInterrupted : MachineOperationalState.PowerOff,
+                StartAt = startAt,
+                EndAt = endAt,
+                DurationMinutes = Math.Round((endAt - startAt).TotalMinutes, 2, MidpointRounding.AwayFromZero),
+                DataQualityCode = device.IsEnabled ? "not_collected" : "manual_disabled",
+            },
+        ];
     }
 
-    private static IReadOnlyList<TimelineSegmentDto> MergeAdjacentSegments(IReadOnlyList<TimelineSegmentDto> segments)
+    private void ValidateRequest(DeviceUpsertRequest request)
     {
-        var merged = new List<TimelineSegmentDto>();
-        foreach (var segment in segments.OrderBy(item => item.StartAt))
+        if (string.IsNullOrWhiteSpace(request.DepartmentCode) ||
+            string.IsNullOrWhiteSpace(request.DepartmentName) ||
+            string.IsNullOrWhiteSpace(request.WorkshopCode) ||
+            string.IsNullOrWhiteSpace(request.WorkshopName) ||
+            string.IsNullOrWhiteSpace(request.DeviceCode) ||
+            string.IsNullOrWhiteSpace(request.DeviceName) ||
+            string.IsNullOrWhiteSpace(request.IpAddress) ||
+            string.IsNullOrWhiteSpace(request.AgentNodeName))
         {
-            var last = merged.LastOrDefault();
-            if (last is not null && last.State == segment.State && last.EndAt == segment.StartAt)
-            {
-                last.EndAt = segment.EndAt;
-                last.DurationMinutes = Math.Round((last.EndAt - last.StartAt).TotalMinutes, 2, MidpointRounding.AwayFromZero);
-                continue;
-            }
-
-            merged.Add(new TimelineSegmentDto
-            {
-                State = segment.State,
-                StartAt = segment.StartAt,
-                EndAt = segment.EndAt,
-                DurationMinutes = segment.DurationMinutes,
-                DataQualityCode = segment.DataQualityCode,
-            });
+            throw new InvalidOperationException("部门、车间、设备编码、设备名称、IP 地址和 Agent 节点不能为空。");
         }
 
-        return merged;
+        if (request.Port <= 0 || request.Port > 65535)
+        {
+            throw new InvalidOperationException("端口必须在 1 到 65535 之间。");
+        }
     }
 
-    private static List<DeviceDto> BuildSeedDevices()
+    private void ValidateDeviceCodeUniqueness(DeviceUpsertRequest request, Guid? excludedDeviceId)
     {
-        var devices = new List<DeviceDto>();
-        var controllers = new[]
-        {
-            "FANUC Series 0i Mate-TC",
-            "FANUC Series 0i-T",
-            "FANUC Series 0i-TF",
-            "FANUC Series 0i-TF Plus",
-            "FANUC Series 0i Mate-TD",
-        };
+        var duplicated = _devices.FirstOrDefault(device =>
+            (!excludedDeviceId.HasValue || device.DeviceId != excludedDeviceId.Value) &&
+            device.DeviceCode.Equals(request.DeviceCode.Trim(), StringComparison.OrdinalIgnoreCase));
 
-        var deviceIndex = 1;
-        foreach (var workshop in WorkshopSeed)
+        if (duplicated is not null)
         {
-            for (var machineIndex = 1; machineIndex <= 3; machineIndex++)
-            {
-                devices.Add(new DeviceDto
-                {
-                    DeviceId = Guid.NewGuid(),
-                    DepartmentCode = workshop.DepartmentCode,
-                    DepartmentName = workshop.DepartmentName,
-                    WorkshopCode = workshop.WorkshopCode,
-                    WorkshopName = workshop.WorkshopName,
-                    DeviceCode = $"{workshop.WorkshopCode}-CNC-{machineIndex:00}",
-                    DeviceName = $"{workshop.WorkshopName}机床 {machineIndex:00}",
-                    Manufacturer = "FANUC 车削设备",
-                    ControllerModel = controllers[(deviceIndex - 1) % controllers.Length],
-                    ProtocolName = "FOCAS over Ethernet",
-                    IpAddress = $"192.168.{90 + deviceIndex / 3}.{40 + machineIndex}",
-                    Port = 8193,
-                    AgentNodeName = $"{workshop.WorkshopName}-Agent",
-                    CurrentState = MachineOperationalState.Standby,
-                    HealthLevel = DeviceHealthLevel.Normal,
-                    IsEnabled = true,
-                    LastHeartbeatAt = DateTimeOffset.Now,
-                });
-                deviceIndex++;
-            }
+            throw new InvalidOperationException($"设备编码 {request.DeviceCode.Trim()} 已存在，请使用唯一编码。");
+        }
+    }
+
+    private void ValidateAgentNetwork(DeviceUpsertRequest request, Guid? excludedDeviceId)
+    {
+        if (!IPAddress.TryParse(request.IpAddress.Trim(), out var candidateAddress))
+        {
+            throw new InvalidOperationException($"设备 IP 地址 {request.IpAddress.Trim()} 格式不正确，无法进行网段校验。");
         }
 
-        return devices;
+        if (candidateAddress.AddressFamily != AddressFamily.InterNetwork)
+        {
+            throw new InvalidOperationException("当前只支持 IPv4 地址校验。");
+        }
+
+        var devicesOnSameAgent = _devices
+            .Where(device =>
+                device.AgentNodeName.Equals(request.AgentNodeName.Trim(), StringComparison.OrdinalIgnoreCase) &&
+                (!excludedDeviceId.HasValue || device.DeviceId != excludedDeviceId.Value))
+            .ToList();
+
+        if (devicesOnSameAgent.Count == 0)
+        {
+            return;
+        }
+
+        var referenceDevice = devicesOnSameAgent[0];
+        if (!IPAddress.TryParse(referenceDevice.IpAddress, out var referenceAddress) || referenceAddress.AddressFamily != AddressFamily.InterNetwork)
+        {
+            throw new InvalidOperationException(
+                $"Agent 节点 {request.AgentNodeName.Trim()} 下已有设备 {referenceDevice.DeviceCode} 的 IP 配置异常，无法继续做网段校验。");
+        }
+
+        if (IsSame24Subnet(referenceAddress, candidateAddress))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Agent 节点 {request.AgentNodeName.Trim()} 当前已绑定网段 {GetSubnetPrefix(referenceAddress)}.0/24，" +
+            $"设备 {referenceDevice.DeviceCode} 的 IP 为 {referenceDevice.IpAddress}；当前新设备 IP 为 {request.IpAddress.Trim()}，不在同一网段，已拒绝保存。");
     }
 
-    private static Dictionary<string, FormulaDefinitionDto> BuildSeedFormulas()
+    private static bool IsSame24Subnet(IPAddress left, IPAddress right)
     {
+        var leftBytes = left.GetAddressBytes();
+        var rightBytes = right.GetAddressBytes();
+        return leftBytes[0] == rightBytes[0] &&
+               leftBytes[1] == rightBytes[1] &&
+               leftBytes[2] == rightBytes[2];
+    }
+
+    private static string GetSubnetPrefix(IPAddress address)
+    {
+        var bytes = address.GetAddressBytes();
+        return $"{bytes[0]}.{bytes[1]}.{bytes[2]}";
+    }
+
+    private static Dictionary<string, FormulaDefinitionDto> BuildDefaultFormulas()
+    {
+        var now = DateTimeOffset.Now;
         return new Dictionary<string, FormulaDefinitionDto>(StringComparer.OrdinalIgnoreCase)
         {
-            ["power_on_rate"] = new FormulaDefinitionDto
+            ["power_on_rate"] = new()
             {
                 Code = "power_on_rate",
                 DisplayName = "开机率",
-                Description = "默认按当日已观测时长计算开机率。",
+                Description = "默认按当天已观测时长计算开机率。",
                 Expression = "(power_on_minutes / observed_minutes) * 100",
                 ResultUnit = "%",
-                UpdatedAt = DateTimeOffset.Now,
+                UpdatedAt = now,
                 UpdatedBy = "system",
             },
-            ["utilization_rate"] = new FormulaDefinitionDto
+            ["utilization_rate"] = new()
             {
                 Code = "utilization_rate",
                 DisplayName = "利用率",
                 Description = "默认按开机时间中的加工占比计算利用率。",
                 Expression = "(processing_minutes / power_on_minutes) * 100",
                 ResultUnit = "%",
-                UpdatedAt = DateTimeOffset.Now,
+                UpdatedAt = now,
                 UpdatedBy = "system",
             },
         };
@@ -504,9 +555,9 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
     {
         var permissions = new[]
         {
-            new PermissionDto { PermissionCode = "device.read", PermissionName = "查看设备", Description = "查看设备列表、状态和时间线。" },
-            new PermissionDto { PermissionCode = "device.write", PermissionName = "维护设备", Description = "增删改设备和采集点位。" },
-            new PermissionDto { PermissionCode = "report.read", PermissionName = "查看报表", Description = "查看日报、利用率和开机率。" },
+            new PermissionDto { PermissionCode = "device.read", PermissionName = "查看设备", Description = "查看设备列表、实时状态和时间线。" },
+            new PermissionDto { PermissionCode = "device.write", PermissionName = "维护设备", Description = "维护部门、车间和设备主数据。" },
+            new PermissionDto { PermissionCode = "report.read", PermissionName = "查看报表", Description = "查看日报、开机率和利用率。" },
             new PermissionDto { PermissionCode = "formula.write", PermissionName = "维护公式", Description = "修改开机率和利用率公式。" },
             new PermissionDto { PermissionCode = "security.write", PermissionName = "维护权限", Description = "管理用户、角色和权限。" },
         };
@@ -547,26 +598,6 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                 RoleCodes = ["admin"],
                 IsEnabled = true,
                 LastLoginAt = DateTimeOffset.Now.AddMinutes(-15),
-            },
-            new UserDto
-            {
-                UserCode = "it_ops_01",
-                UserName = "it.ops",
-                DisplayName = "IT 运维",
-                Department = "信息部",
-                RoleCodes = ["itops"],
-                IsEnabled = true,
-                LastLoginAt = DateTimeOffset.Now.AddMinutes(-32),
-            },
-            new UserDto
-            {
-                UserCode = "mgr_w01",
-                UserName = "w01.manager",
-                DisplayName = "一车间主管",
-                Department = "机械加工部",
-                RoleCodes = ["manager"],
-                IsEnabled = true,
-                LastLoginAt = DateTimeOffset.Now.AddHours(-2),
             },
         };
 
@@ -633,63 +664,4 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
             UpdatedBy = source.UpdatedBy,
         };
     }
-
-    private static IReadOnlyList<PatternEntry> GetPatternA() =>
-    [
-        new PatternEntry(new TimeOnly(0, 0), new TimeOnly(7, 30), MachineOperationalState.PowerOff),
-        new PatternEntry(new TimeOnly(7, 30), new TimeOnly(8, 0), MachineOperationalState.Standby),
-        new PatternEntry(new TimeOnly(8, 0), new TimeOnly(10, 30), MachineOperationalState.Processing),
-        new PatternEntry(new TimeOnly(10, 30), new TimeOnly(10, 45), MachineOperationalState.Waiting),
-        new PatternEntry(new TimeOnly(10, 45), new TimeOnly(12, 0), MachineOperationalState.Processing),
-        new PatternEntry(new TimeOnly(12, 0), new TimeOnly(13, 0), MachineOperationalState.Standby),
-        new PatternEntry(new TimeOnly(13, 0), new TimeOnly(15, 20), MachineOperationalState.Processing),
-        new PatternEntry(new TimeOnly(15, 20), new TimeOnly(15, 35), MachineOperationalState.Alarm),
-        new PatternEntry(new TimeOnly(15, 35), new TimeOnly(17, 30), MachineOperationalState.Processing),
-        new PatternEntry(new TimeOnly(17, 30), new TimeOnly(18, 0), MachineOperationalState.Waiting),
-        new PatternEntry(new TimeOnly(18, 0), new TimeOnly(23, 59, 59), MachineOperationalState.PowerOff),
-    ];
-
-    private static IReadOnlyList<PatternEntry> GetPatternB() =>
-    [
-        new PatternEntry(new TimeOnly(0, 0), new TimeOnly(7, 0), MachineOperationalState.PowerOff),
-        new PatternEntry(new TimeOnly(7, 0), new TimeOnly(8, 15), MachineOperationalState.Standby),
-        new PatternEntry(new TimeOnly(8, 15), new TimeOnly(11, 10), MachineOperationalState.Processing),
-        new PatternEntry(new TimeOnly(11, 10), new TimeOnly(11, 50), MachineOperationalState.Waiting),
-        new PatternEntry(new TimeOnly(11, 50), new TimeOnly(12, 20), MachineOperationalState.Processing),
-        new PatternEntry(new TimeOnly(12, 20), new TimeOnly(13, 30), MachineOperationalState.Standby),
-        new PatternEntry(new TimeOnly(13, 30), new TimeOnly(16, 20), MachineOperationalState.Processing),
-        new PatternEntry(new TimeOnly(16, 20), new TimeOnly(17, 0), MachineOperationalState.Waiting),
-        new PatternEntry(new TimeOnly(17, 0), new TimeOnly(20, 0), MachineOperationalState.Standby),
-        new PatternEntry(new TimeOnly(20, 0), new TimeOnly(23, 59, 59), MachineOperationalState.PowerOff),
-    ];
-
-    private static IReadOnlyList<PatternEntry> GetPatternC() =>
-    [
-        new PatternEntry(new TimeOnly(0, 0), new TimeOnly(8, 0), MachineOperationalState.PowerOff),
-        new PatternEntry(new TimeOnly(8, 0), new TimeOnly(9, 20), MachineOperationalState.Standby),
-        new PatternEntry(new TimeOnly(9, 20), new TimeOnly(11, 40), MachineOperationalState.Processing),
-        new PatternEntry(new TimeOnly(11, 40), new TimeOnly(11, 55), MachineOperationalState.Emergency),
-        new PatternEntry(new TimeOnly(11, 55), new TimeOnly(12, 35), MachineOperationalState.Waiting),
-        new PatternEntry(new TimeOnly(12, 35), new TimeOnly(14, 55), MachineOperationalState.Processing),
-        new PatternEntry(new TimeOnly(14, 55), new TimeOnly(15, 0), MachineOperationalState.CommunicationInterrupted),
-        new PatternEntry(new TimeOnly(15, 0), new TimeOnly(17, 45), MachineOperationalState.Processing),
-        new PatternEntry(new TimeOnly(17, 45), new TimeOnly(18, 20), MachineOperationalState.Standby),
-        new PatternEntry(new TimeOnly(18, 20), new TimeOnly(23, 59, 59), MachineOperationalState.PowerOff),
-    ];
-
-    private static IReadOnlyList<PatternEntry> GetPatternD() =>
-    [
-        new PatternEntry(new TimeOnly(0, 0), new TimeOnly(6, 50), MachineOperationalState.PowerOff),
-        new PatternEntry(new TimeOnly(6, 50), new TimeOnly(7, 40), MachineOperationalState.Standby),
-        new PatternEntry(new TimeOnly(7, 40), new TimeOnly(9, 50), MachineOperationalState.Processing),
-        new PatternEntry(new TimeOnly(9, 50), new TimeOnly(10, 40), MachineOperationalState.Waiting),
-        new PatternEntry(new TimeOnly(10, 40), new TimeOnly(12, 10), MachineOperationalState.Processing),
-        new PatternEntry(new TimeOnly(12, 10), new TimeOnly(13, 30), MachineOperationalState.PowerOff),
-        new PatternEntry(new TimeOnly(13, 30), new TimeOnly(14, 0), MachineOperationalState.Standby),
-        new PatternEntry(new TimeOnly(14, 0), new TimeOnly(16, 15), MachineOperationalState.Processing),
-        new PatternEntry(new TimeOnly(16, 15), new TimeOnly(17, 45), MachineOperationalState.Waiting),
-        new PatternEntry(new TimeOnly(17, 45), new TimeOnly(23, 59, 59), MachineOperationalState.PowerOff),
-    ];
-
-    private sealed record PatternEntry(TimeOnly Start, TimeOnly End, MachineOperationalState State);
 }

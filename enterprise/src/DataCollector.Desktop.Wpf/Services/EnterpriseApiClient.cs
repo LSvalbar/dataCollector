@@ -53,7 +53,7 @@ public sealed class EnterpriseApiClient : IDisposable
     public async Task<FormulaDefinitionDto?> UpdateFormulaAsync(string code, FormulaUpdateRequest request, CancellationToken cancellationToken = default)
     {
         using var response = await _httpClient.PutAsJsonAsync($"/api/reports/formulas/{code}", request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<FormulaDefinitionDto>(cancellationToken);
     }
 
@@ -70,25 +70,69 @@ public sealed class EnterpriseApiClient : IDisposable
     public async Task<DeviceDto?> CreateDeviceAsync(DeviceUpsertRequest request, CancellationToken cancellationToken = default)
     {
         using var response = await _httpClient.PostAsJsonAsync("/api/device-management/devices", request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<DeviceDto>(cancellationToken);
     }
 
     public async Task<DeviceDto?> UpdateDeviceAsync(Guid deviceId, DeviceUpsertRequest request, CancellationToken cancellationToken = default)
     {
         using var response = await _httpClient.PutAsJsonAsync($"/api/device-management/devices/{deviceId}", request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<DeviceDto>(cancellationToken);
     }
 
     public async Task DeleteDeviceAsync(Guid deviceId, CancellationToken cancellationToken = default)
     {
         using var response = await _httpClient.DeleteAsync($"/api/device-management/devices/{deviceId}", cancellationToken);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    public async Task RenameDepartmentAsync(string departmentCode, string newName, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PutAsJsonAsync(
+            $"/api/device-management/departments/{departmentCode}/rename",
+            new NameChangeRequest { NewName = newName },
+            cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    public async Task RenameWorkshopAsync(string workshopCode, string newName, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PutAsJsonAsync(
+            $"/api/device-management/workshops/{workshopCode}/rename",
+            new NameChangeRequest { NewName = newName },
+            cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    public async Task RenameDeviceAsync(Guid deviceId, string newName, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PutAsJsonAsync(
+            $"/api/device-management/devices/{deviceId}/rename",
+            new NameChangeRequest { NewName = newName },
+            cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
     }
 
     public void Dispose()
     {
         _httpClient.Dispose();
+    }
+
+    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var message = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            response.EnsureSuccessStatusCode();
+            return;
+        }
+
+        throw new InvalidOperationException(message.Trim().Trim('"'));
     }
 }

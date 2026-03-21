@@ -223,7 +223,7 @@
                                     Grid.Column="1"
                                     Padding="{TemplateBinding Padding}"
                                     Background="Transparent">
-                                <ContentPresenter />
+                                <ContentPresenter ContentSource="Header" />
                             </Border>
                             <ItemsPresenter x:Name="ItemsHost"
                                             Grid.Row="1"

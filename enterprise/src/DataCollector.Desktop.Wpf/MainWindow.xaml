@@ -92,7 +92,17 @@
                                       Grid.Row="1"
                                       Margin="0,18,0,0"
                                       MouseDoubleClick="DeviceTreeView_MouseDoubleClick"
-                                      SelectedItemChanged="DeviceTreeView_SelectedItemChanged" />
+                                      PreviewMouseRightButtonDown="DeviceTreeView_PreviewMouseRightButtonDown"
+                                      SelectedItemChanged="DeviceTreeView_SelectedItemChanged">
+                                <TreeView.ContextMenu>
+                                    <ContextMenu x:Name="DeviceTreeContextMenu" Opened="DeviceTreeContextMenu_Opened">
+                                        <MenuItem x:Name="RefreshTreeMenuItem" Header="&#x5237;&#x65B0;&#x6811;&#x83DC;&#x5355;" Click="RefreshTreeMenuItem_Click" />
+                                        <MenuItem x:Name="AddDeviceFromTreeMenuItem" Header="&#x6DFB;&#x52A0;&#x8BBE;&#x5907;" Click="AddDeviceFromTreeMenuItem_Click" />
+                                        <Separator />
+                                        <MenuItem x:Name="RenameTreeNodeMenuItem" Header="&#x91CD;&#x547D;&#x540D;" Click="RenameTreeNodeMenuItem_Click" />
+                                    </ContextMenu>
+                                </TreeView.ContextMenu>
+                            </TreeView>
                         </Grid>
                     </Border>
 
@@ -120,7 +130,6 @@
                                            Text="正在加载设备概览..." />
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
-                                <Button Width="108" Margin="0,0,8,0" Style="{StaticResource SecondaryButtonStyle}" Content="新增设备" Click="AddDeviceButton_Click" />
                                 <Button Width="108" Margin="0,0,8,0" Style="{StaticResource SecondaryButtonStyle}" Content="编辑设备" Click="EditDeviceButton_Click" />
                                 <Button Width="108" Margin="0,0,8,0" Style="{StaticResource DangerButtonStyle}" Content="删除设备" Click="DeleteDeviceButton_Click" />
                                 <Button Width="108" Style="{StaticResource PrimaryButtonStyle}" Content="刷新设备" Click="RefreshOverviewButton_Click" />

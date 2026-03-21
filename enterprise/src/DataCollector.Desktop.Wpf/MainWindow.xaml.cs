@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     private string _selectedScopeKey = "ALL";
     private bool _autoRefreshInProgress;
     private DeviceStatusWindow? _deviceStatusWindow;
+    private OrganizationTreeNode? _treeContextNode;
 
     public MainWindow()
     {
@@ -522,6 +523,169 @@ public partial class MainWindow : Window
         ServerStatusTextBlock.Foreground = online ? CreateBrush("#107C10") : CreateBrush("#D13438");
     }
 
+    private async Task OpenAddDeviceDialogAsync()
+    {
+        var window = new DeviceEditorWindow(BuildDefaultRequest()) { Owner = this };
+        if (window.ShowDialog() != true || window.Request is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _apiClient.CreateDeviceAsync(window.Request);
+            await RefreshOverviewAsync(true);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "添加设备失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task RenameTreeNodeAsync()
+    {
+        if (_treeContextNode is null)
+        {
+            MessageBox.Show(this, "请先在树菜单中选择要重命名的层级。", "未选择层级", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var currentName = _treeContextNode.NodeType switch
+        {
+            ScopeNodeType.Device => ResolveDeviceName(_treeContextNode.DeviceId),
+            _ => _treeContextNode.Title,
+        };
+
+        var window = new RenameNodeWindow(currentName, ResolveRenameTitle(_treeContextNode.NodeType)) { Owner = this };
+        if (window.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            switch (_treeContextNode.NodeType)
+            {
+                case ScopeNodeType.Department:
+                    await _apiClient.RenameDepartmentAsync(_treeContextNode.ScopeKey, window.NodeName);
+                    break;
+                case ScopeNodeType.Workshop:
+                    await _apiClient.RenameWorkshopAsync(_treeContextNode.ScopeKey, window.NodeName);
+                    break;
+                case ScopeNodeType.Device when _treeContextNode.DeviceId.HasValue:
+                    await _apiClient.RenameDeviceAsync(_treeContextNode.DeviceId.Value, window.NodeName);
+                    break;
+                default:
+                    return;
+            }
+
+            await RefreshOverviewAsync(true);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "重命名失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private static string ResolveRenameTitle(ScopeNodeType nodeType) =>
+        nodeType switch
+        {
+            ScopeNodeType.Department => "重命名部门",
+            ScopeNodeType.Workshop => "重命名车间",
+            ScopeNodeType.Device => "重命名设备",
+            _ => "重命名",
+        };
+
+    private string ResolveDeviceName(Guid? deviceId)
+    {
+        if (!deviceId.HasValue)
+        {
+            return string.Empty;
+        }
+
+        return _devices.FirstOrDefault(device => device.DeviceId == deviceId.Value)?.DeviceName ?? string.Empty;
+    }
+
+    private DeviceUpsertRequest BuildDefaultRequest()
+    {
+        var request = new DeviceUpsertRequest
+        {
+            DepartmentCode = string.Empty,
+            DepartmentName = string.Empty,
+            WorkshopCode = string.Empty,
+            WorkshopName = string.Empty,
+            DeviceCode = string.Empty,
+            DeviceName = string.Empty,
+            Manufacturer = "FANUC",
+            ControllerModel = "FANUC Series 0i-TF",
+            ProtocolName = "FOCAS over Ethernet",
+            IpAddress = string.Empty,
+            Port = 8193,
+            AgentNodeName = string.Empty,
+            IsEnabled = true,
+        };
+
+        var sourceNode = _treeContextNode ?? DeviceTreeView.SelectedItem as OrganizationTreeNode;
+        if (sourceNode is null)
+        {
+            return request;
+        }
+
+        if (sourceNode.NodeType == ScopeNodeType.Device && sourceNode.DeviceId.HasValue)
+        {
+            var device = _devices.FirstOrDefault(item => item.DeviceId == sourceNode.DeviceId.Value);
+            if (device is not null)
+            {
+                request.DepartmentCode = device.DepartmentCode;
+                request.DepartmentName = device.DepartmentName;
+                request.WorkshopCode = device.WorkshopCode;
+                request.WorkshopName = device.WorkshopName;
+                request.AgentNodeName = device.AgentNodeName;
+            }
+
+            return request;
+        }
+
+        if (sourceNode.NodeType == ScopeNodeType.Workshop)
+        {
+            var device = _devices.FirstOrDefault(item => item.WorkshopCode == sourceNode.ScopeKey);
+            if (device is not null)
+            {
+                request.DepartmentCode = device.DepartmentCode;
+                request.DepartmentName = device.DepartmentName;
+                request.WorkshopCode = device.WorkshopCode;
+                request.WorkshopName = device.WorkshopName;
+                request.AgentNodeName = device.AgentNodeName;
+            }
+
+            return request;
+        }
+
+        if (sourceNode.NodeType == ScopeNodeType.Department)
+        {
+            var device = _devices.FirstOrDefault(item => item.DepartmentCode == sourceNode.ScopeKey);
+            request.DepartmentCode = device?.DepartmentCode ?? sourceNode.ScopeKey;
+            request.DepartmentName = device?.DepartmentName ?? sourceNode.Title;
+        }
+
+        return request;
+    }
+
+    private static T? FindAncestor<T>(DependencyObject? source) where T : DependencyObject
+    {
+        while (source is not null)
+        {
+            if (source is T target)
+            {
+                return target;
+            }
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return null;
+    }
+
     private DeviceDto? GetSelectedDevice()
     {
         if (DevicesGrid.SelectedItem is DeviceGridRow row)
@@ -672,14 +836,7 @@ public partial class MainWindow : Window
 
     private async void AddDeviceButton_Click(object sender, RoutedEventArgs e)
     {
-        var window = new DeviceEditorWindow { Owner = this };
-        if (window.ShowDialog() != true || window.Request is null)
-        {
-            return;
-        }
-
-        await _apiClient.CreateDeviceAsync(window.Request);
-        await RefreshOverviewAsync(true);
+        await OpenAddDeviceDialogAsync();
     }
 
     private async void EditDeviceButton_Click(object sender, RoutedEventArgs e)
@@ -697,8 +854,15 @@ public partial class MainWindow : Window
             return;
         }
 
-        await _apiClient.UpdateDeviceAsync(device.DeviceId, window.Request);
-        await RefreshOverviewAsync(true);
+        try
+        {
+            await _apiClient.UpdateDeviceAsync(device.DeviceId, window.Request);
+            await RefreshOverviewAsync(true);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "编辑设备失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private async void DeleteDeviceButton_Click(object sender, RoutedEventArgs e)
@@ -715,8 +879,52 @@ public partial class MainWindow : Window
             return;
         }
 
-        await _apiClient.DeleteDeviceAsync(device.DeviceId);
+        try
+        {
+            await _apiClient.DeleteDeviceAsync(device.DeviceId);
+            await RefreshOverviewAsync(true);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "删除设备失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void RefreshTreeMenuItem_Click(object sender, RoutedEventArgs e)
+    {
         await RefreshOverviewAsync(true);
+    }
+
+    private async void AddDeviceFromTreeMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        await OpenAddDeviceDialogAsync();
+    }
+
+    private async void RenameTreeNodeMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        await RenameTreeNodeAsync();
+    }
+
+    private void DeviceTreeContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        RenameTreeNodeMenuItem.IsEnabled = _treeContextNode is not null;
+        RenameTreeNodeMenuItem.Header = _treeContextNode is null
+            ? "重命名"
+            : ResolveRenameTitle(_treeContextNode.NodeType);
+    }
+
+    private void DeviceTreeView_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var source = e.OriginalSource as DependencyObject;
+        var treeViewItem = FindAncestor<TreeViewItem>(source);
+        if (treeViewItem?.DataContext is OrganizationTreeNode node)
+        {
+            treeViewItem.IsSelected = true;
+            _treeContextNode = node;
+            return;
+        }
+
+        _treeContextNode = null;
     }
 
     private void DeviceTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
@@ -725,11 +933,13 @@ public partial class MainWindow : Window
         {
             _selectedScopeType = ScopeNodeType.All;
             _selectedScopeKey = "ALL";
+            _treeContextNode = null;
         }
         else
         {
             _selectedScopeType = node.NodeType;
             _selectedScopeKey = node.ScopeKey;
+            _treeContextNode = node;
         }
 
         ApplyScopeToView(DateTimeOffset.Now);

@@ -135,3 +135,8 @@ public sealed class DeviceManagementOverviewDto
 
     public DateTimeOffset SnapshotAt { get; set; }
 }
+
+public sealed class NameChangeRequest
+{
+    public required string NewName { get; set; }
+}

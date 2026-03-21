@@ -10,6 +10,12 @@ public interface IEnterprisePlatformService
 
     Task DeleteDeviceAsync(Guid deviceId, CancellationToken cancellationToken);
 
+    Task RenameDepartmentAsync(string departmentCode, string newName, CancellationToken cancellationToken);
+
+    Task RenameWorkshopAsync(string workshopCode, string newName, CancellationToken cancellationToken);
+
+    Task RenameDeviceAsync(Guid deviceId, string newName, CancellationToken cancellationToken);
+
     Task<DailyReportResponse> GetDailyReportAsync(DateOnly reportDate, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<FormulaDefinitionDto>> GetFormulasAsync(CancellationToken cancellationToken);
