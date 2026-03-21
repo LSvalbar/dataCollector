@@ -19,6 +19,8 @@ public sealed class AgentOptions
 
 public sealed class MachineEndpointOptions
 {
+    public bool Enabled { get; set; } = true;
+
     public string DeviceCode { get; set; } = string.Empty;
 
     public string IpAddress { get; set; } = string.Empty;
@@ -26,4 +28,10 @@ public sealed class MachineEndpointOptions
     public int Port { get; set; } = 8193;
 
     public string Protocol { get; set; } = "FOCAS over Ethernet";
+
+    public int TimeoutSeconds { get; set; } = 10;
+
+    public List<int> ProcessingOperationModes { get; set; } = [3];
+
+    public List<int> WaitingOperationModes { get; set; } = [1, 2];
 }

@@ -315,6 +315,7 @@ public partial class MainWindow : Window
             IpAddress = device.IpAddress,
             Port = device.Port,
             AgentNodeName = device.AgentNodeName,
+            MachineOnlineText = device.MachineOnline ? "在线" : "离线",
             StateText = device.CurrentState.ToDisplayName(),
             HealthText = device.HealthLevel switch
             {
@@ -324,7 +325,12 @@ public partial class MainWindow : Window
                 _ => "未知",
             },
             CurrentProgramNo = device.CurrentProgramNo ?? "-",
+            SpindleSpeedText = device.SpindleSpeedRpm?.ToString() ?? "-",
+            SpindleLoadText = device.SpindleLoadPercent is null ? "-" : $"{device.SpindleLoadPercent:F1}%",
+            DataQualityCode = device.DataQualityCode ?? "-",
+            LastCollectedAtText = device.LastCollectedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-",
             LastHeartbeatAtText = device.LastHeartbeatAt.ToString("yyyy-MM-dd HH:mm:ss"),
+            LastCollectionError = string.IsNullOrWhiteSpace(device.LastCollectionError) ? "-" : device.LastCollectionError,
         };
     }
 
@@ -452,10 +458,16 @@ public partial class MainWindow : Window
         public required string IpAddress { get; init; }
         public int Port { get; init; }
         public required string AgentNodeName { get; init; }
+        public required string MachineOnlineText { get; init; }
         public required string StateText { get; init; }
         public required string HealthText { get; init; }
         public required string CurrentProgramNo { get; init; }
+        public required string SpindleSpeedText { get; init; }
+        public required string SpindleLoadText { get; init; }
+        public required string DataQualityCode { get; init; }
+        public required string LastCollectedAtText { get; init; }
         public required string LastHeartbeatAtText { get; init; }
+        public required string LastCollectionError { get; init; }
     }
 
     private sealed class DailyReportGridRow

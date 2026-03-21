@@ -27,14 +27,17 @@ New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 $publishTargets = @(
     @{
         Name = "server"
+        Runtime = $Runtime
         Project = Join-Path $enterpriseRoot "src\DataCollector.Server.Api\DataCollector.Server.Api.csproj"
     },
     @{
         Name = "client"
+        Runtime = $Runtime
         Project = Join-Path $enterpriseRoot "src\DataCollector.Desktop.Wpf\DataCollector.Desktop.Wpf.csproj"
     },
     @{
         Name = "agent"
+        Runtime = "win-x86"
         Project = Join-Path $enterpriseRoot "src\DataCollector.Agent.Worker\DataCollector.Agent.Worker.csproj"
     }
 )
@@ -43,7 +46,7 @@ foreach ($target in $publishTargets) {
     $targetOutput = Join-Path $outputRoot $target.Name
     dotnet publish $target.Project `
         -c $Configuration `
-        -r $Runtime `
+        -r $target.Runtime `
         --self-contained true `
         -p:PublishSingleFile=false `
         -p:PublishReadyToRun=true `

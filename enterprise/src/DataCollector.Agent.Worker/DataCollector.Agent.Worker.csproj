@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-DataCollector.Agent.Worker-6e21f5ee-521d-461a-a478-e36eb9bdea6d</UserSecretsId>
+    <PlatformTarget>x86</PlatformTarget>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,5 +16,15 @@
   <ItemGroup>
     <ProjectReference Include="..\DataCollector.Core\DataCollector.Core.csproj" />
     <ProjectReference Include="..\DataCollector.Contracts\DataCollector.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\..\vendor\Fwlib32.dll" Link="Fwlib32.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\..\vendor\fwlibe1.dll" Link="fwlibe1.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\..\vendor\Fwlib0i.dll" Link="Fwlib0i.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\..\vendor\Fwlib0iB.dll" Link="Fwlib0iB.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\..\vendor\fwlib0iD.dll" Link="fwlib0iD.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\..\vendor\fwlib0DN.dll" Link="fwlib0DN.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\..\vendor\fwlib30i.dll" Link="fwlib30i.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -16,6 +16,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<FormulaEngine>();
 builder.Services.AddSingleton<DailyMetricsCalculator>();
+builder.Services.AddSingleton<LiveDeviceStateStore>();
 builder.Services.AddSingleton<IEnterprisePlatformService, InMemoryEnterprisePlatformService>();
 
 var app = builder.Build();

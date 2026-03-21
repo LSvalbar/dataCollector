@@ -53,11 +53,23 @@ public sealed class DeviceDto
 
     public bool IsEnabled { get; set; }
 
+    public bool MachineOnline { get; set; }
+
     public DateTimeOffset LastHeartbeatAt { get; set; }
+
+    public DateTimeOffset? LastCollectedAt { get; set; }
 
     public string? CurrentProgramNo { get; set; }
 
     public string? CurrentProgramName { get; set; }
+
+    public int? SpindleSpeedRpm { get; set; }
+
+    public double? SpindleLoadPercent { get; set; }
+
+    public string? DataQualityCode { get; set; }
+
+    public string? LastCollectionError { get; set; }
 }
 
 public sealed class DeviceUpsertRequest

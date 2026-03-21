@@ -18,6 +18,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
     private readonly object _gate = new();
     private readonly FormulaEngine _formulaEngine;
     private readonly DailyMetricsCalculator _dailyMetricsCalculator;
+    private readonly LiveDeviceStateStore _liveDeviceStateStore;
     private readonly TimeProvider _timeProvider;
     private readonly List<DeviceDto> _devices;
     private readonly Dictionary<string, FormulaDefinitionDto> _formulas;
@@ -26,10 +27,12 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
     public InMemoryEnterprisePlatformService(
         FormulaEngine formulaEngine,
         DailyMetricsCalculator dailyMetricsCalculator,
+        LiveDeviceStateStore liveDeviceStateStore,
         TimeProvider timeProvider)
     {
         _formulaEngine = formulaEngine;
         _dailyMetricsCalculator = dailyMetricsCalculator;
+        _liveDeviceStateStore = liveDeviceStateStore;
         _timeProvider = timeProvider;
         _devices = BuildSeedDevices();
         _formulas = BuildSeedFormulas();
@@ -152,7 +155,9 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
             .ThenBy(device => device.DeviceCode)
             .Select(device =>
             {
-                var timeline = BuildTimeline(device, reportDate, now);
+                var timeline = _liveDeviceStateStore.HasTimeline(device.DeviceCode, reportDate)
+                    ? _liveDeviceStateStore.GetTimeline(device.DeviceCode, reportDate, now)
+                    : BuildTimeline(device, reportDate, now);
                 var metrics = _dailyMetricsCalculator.Calculate(timeline);
                 var variables = _formulaEngine.BuildVariableMap(metrics);
                 return new DailyReportRowDto
@@ -173,7 +178,9 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                     PowerOnRate = _formulaEngine.Evaluate(powerOnFormula.Expression, variables),
                     UtilizationRate = _formulaEngine.Evaluate(utilizationFormula.Expression, variables),
                     CurrentState = device.CurrentState,
-                    DataQualityCode = "native_timer_first",
+                    DataQualityCode = _liveDeviceStateStore.HasTimeline(device.DeviceCode, reportDate)
+                        ? "realtime_session"
+                        : "native_timer_first",
                 };
             })
             .ToArray();
@@ -221,7 +228,9 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
         var now = _timeProvider.GetLocalNow();
         var device = BuildDeviceSnapshots(now).FirstOrDefault(item => item.DeviceId == deviceId)
             ?? throw new KeyNotFoundException($"未找到设备 {deviceId}。");
-        var segments = BuildTimeline(device, reportDate, now);
+        var segments = _liveDeviceStateStore.HasTimeline(device.DeviceCode, reportDate)
+            ? _liveDeviceStateStore.GetTimeline(device.DeviceCode, reportDate, now)
+            : BuildTimeline(device, reportDate, now);
         var metrics = _dailyMetricsCalculator.Calculate(segments);
 
         return Task.FromResult(new DeviceTimelineResponse
@@ -262,6 +271,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                 var clone = CloneDevice(device);
                 clone.LastHeartbeatAt = now.AddSeconds(-(Math.Abs(device.DeviceCode.GetHashCode()) % 50));
                 clone.CurrentState = ResolveCurrentState(clone, now);
+                clone.MachineOnline = clone.CurrentState != MachineOperationalState.PowerOff;
                 clone.HealthLevel = clone.CurrentState switch
                 {
                     MachineOperationalState.Alarm or MachineOperationalState.Emergency or MachineOperationalState.CommunicationInterrupted => DeviceHealthLevel.Critical,
@@ -272,9 +282,36 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                     ? $"O{Math.Abs(clone.DeviceCode.GetHashCode()) % 9000 + 1000:0000}"
                     : null;
                 clone.CurrentProgramName = clone.CurrentProgramNo is null ? null : "转轴/外圆复合加工";
+                clone.DataQualityCode = "seed_demo";
+                ApplyLiveSnapshot(clone);
                 return clone;
             }).ToList();
         }
+    }
+
+    private void ApplyLiveSnapshot(DeviceDto device)
+    {
+        if (!_liveDeviceStateStore.TryGetLatest(device.DeviceCode, out var snapshot))
+        {
+            return;
+        }
+
+        device.MachineOnline = snapshot.MachineOnline;
+        device.CurrentState = snapshot.CurrentState;
+        device.LastCollectedAt = snapshot.CollectedAt;
+        device.LastHeartbeatAt = snapshot.CollectedAt;
+        device.CurrentProgramNo = snapshot.CurrentProgramNo;
+        device.CurrentProgramName = snapshot.CurrentProgramName;
+        device.SpindleSpeedRpm = snapshot.SpindleSpeedRpm;
+        device.SpindleLoadPercent = snapshot.SpindleLoadPercent;
+        device.DataQualityCode = snapshot.DataQualityCode;
+        device.LastCollectionError = snapshot.ErrorMessage;
+        device.HealthLevel = snapshot.CurrentState switch
+        {
+            MachineOperationalState.Alarm or MachineOperationalState.Emergency or MachineOperationalState.CommunicationInterrupted => DeviceHealthLevel.Critical,
+            MachineOperationalState.PowerOff => DeviceHealthLevel.Warning,
+            _ => DeviceHealthLevel.Normal,
+        };
     }
 
     private MachineOperationalState ResolveCurrentState(DeviceDto device, DateTimeOffset now)
@@ -543,9 +580,15 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
             CurrentState = source.CurrentState,
             HealthLevel = source.HealthLevel,
             IsEnabled = source.IsEnabled,
+            MachineOnline = source.MachineOnline,
             LastHeartbeatAt = source.LastHeartbeatAt,
+            LastCollectedAt = source.LastCollectedAt,
             CurrentProgramNo = source.CurrentProgramNo,
             CurrentProgramName = source.CurrentProgramName,
+            SpindleSpeedRpm = source.SpindleSpeedRpm,
+            SpindleLoadPercent = source.SpindleLoadPercent,
+            DataQualityCode = source.DataQualityCode,
+            LastCollectionError = source.LastCollectionError,
         };
     }
 

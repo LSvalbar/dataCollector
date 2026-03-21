@@ -64,10 +64,16 @@
                                 <DataGridTextColumn Header="IP" Binding="{Binding IpAddress}" Width="120" />
                                 <DataGridTextColumn Header="端口" Binding="{Binding Port}" Width="70" />
                                 <DataGridTextColumn Header="Agent 节点" Binding="{Binding AgentNodeName}" Width="130" />
+                                <DataGridTextColumn Header="在线" Binding="{Binding MachineOnlineText}" Width="70" />
                                 <DataGridTextColumn Header="当前状态" Binding="{Binding StateText}" Width="100" />
                                 <DataGridTextColumn Header="健康度" Binding="{Binding HealthText}" Width="90" />
                                 <DataGridTextColumn Header="当前程序号" Binding="{Binding CurrentProgramNo}" Width="110" />
+                                <DataGridTextColumn Header="主轴转速" Binding="{Binding SpindleSpeedText}" Width="90" />
+                                <DataGridTextColumn Header="主轴负载" Binding="{Binding SpindleLoadText}" Width="90" />
+                                <DataGridTextColumn Header="采集质量" Binding="{Binding DataQualityCode}" Width="110" />
+                                <DataGridTextColumn Header="最近采集" Binding="{Binding LastCollectedAtText}" Width="160" />
                                 <DataGridTextColumn Header="最近心跳" Binding="{Binding LastHeartbeatAtText}" Width="160" />
+                                <DataGridTextColumn Header="采集错误" Binding="{Binding LastCollectionError}" Width="180" />
                             </DataGrid.Columns>
                         </DataGrid>
                     </DockPanel>

@@ -1,3 +1,5 @@
+using DataCollector.Agent.Worker.Focas;
+using DataCollector.Contracts;
 using Microsoft.Extensions.Options;
 
 namespace DataCollector.Agent.Worker;
@@ -6,6 +8,8 @@ public sealed class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
     private readonly AgentOptions _options;
+    private readonly List<FanucMachineSession> _sessions = [];
+    private RealtimeIngestionClient? _ingestionClient;
 
     public Worker(ILogger<Worker> logger, IOptions<AgentOptions> options)
     {
@@ -15,31 +19,49 @@ public sealed class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _ingestionClient = new RealtimeIngestionClient(_options);
+
+        foreach (var machine in _options.Machines.Where(machine => machine.Enabled))
+        {
+            _sessions.Add(new FanucMachineSession(machine, _logger));
+        }
+
         _logger.LogInformation(
             "Agent {AgentNodeName} 已启动，车间 {WorkshopCode}，设备数量 {MachineCount}，轮询周期 {PollInterval}ms，本地缓存 {CachePath}",
             _options.AgentNodeName,
             _options.WorkshopCode,
-            _options.Machines.Count,
+            _sessions.Count,
             _options.PollIntervalMilliseconds,
             _options.LocalCachePath);
 
-        while (!stoppingToken.IsCancellationRequested)
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Math.Max(_options.PollIntervalMilliseconds, 500)));
+        while (await timer.WaitForNextTickAsync(stoppingToken))
         {
-            foreach (var machine in _options.Machines)
+            var snapshots = new List<MachineRealtimeSnapshotDto>();
+            foreach (var session in _sessions)
             {
-                _logger.LogInformation(
-                    "计划采集设备 {DeviceCode} -> {IpAddress}:{Port} ({Protocol})，流程：原生 CNC 采集 -> 本地缓存 -> 幂等上传。",
-                    machine.DeviceCode,
-                    machine.IpAddress,
-                    machine.Port,
-                    machine.Protocol);
+                snapshots.Add(session.Collect());
             }
 
-            _logger.LogInformation(
-                "Agent 上传周期 {UploadIntervalSeconds}s，设计职责：断线补传、质量标记、与中央服务对齐公式和主数据。",
-                _options.UploadIntervalSeconds);
-
-            await Task.Delay(TimeSpan.FromSeconds(Math.Max(_options.UploadIntervalSeconds, 5)), stoppingToken);
+            try
+            {
+                await _ingestionClient.PushAsync(snapshots, stoppingToken);
+                _logger.LogInformation("Pushed {Count} realtime snapshots to {UploadEndpoint}", snapshots.Count, _options.UploadEndpoint);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(exception, "Push realtime snapshots failed");
+            }
         }
+    }
+
+    public override void Dispose()
+    {
+        foreach (var session in _sessions)
+        {
+            session.Dispose();
+        }
+
+        base.Dispose();
     }
 }
