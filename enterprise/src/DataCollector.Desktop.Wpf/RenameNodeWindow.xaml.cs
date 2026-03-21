@@ -7,6 +7,7 @@ public partial class RenameNodeWindow : Window
     public RenameNodeWindow(string currentName, string titleText)
     {
         InitializeComponent();
+        WindowLayoutHelper.EnableResponsiveSizing(this, 0.56, 0.46);
         Title = titleText;
         PromptTextBlock.Text = titleText;
         NameTextBox.Text = currentName;

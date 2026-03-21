@@ -6,10 +6,11 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="机加数采客户端"
-        Width="1620"
-        Height="940"
-        MinWidth="1360"
-        MinHeight="860">
+        Width="1500"
+        Height="900"
+        MinWidth="1120"
+        MinHeight="720"
+        WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <HierarchicalDataTemplate DataType="{x:Type local:OrganizationTreeNode}" ItemsSource="{Binding Children}">
             <StackPanel Orientation="Horizontal" Margin="0,1,0,1" ToolTip="{Binding Subtitle}">

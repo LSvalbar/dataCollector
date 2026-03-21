@@ -12,6 +12,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        WindowLayoutHelper.EnableResponsiveSizing(this);
         _runtimeRoot = AppContext.BaseDirectory;
         _settingsPath = Path.Combine(_runtimeRoot, "launcher.settings.json");
         RuntimeRootTextBlock.Text = _runtimeRoot;

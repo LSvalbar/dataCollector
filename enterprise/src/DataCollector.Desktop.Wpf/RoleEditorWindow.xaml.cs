@@ -10,6 +10,7 @@ public partial class RoleEditorWindow : Window
     public RoleEditorWindow(IEnumerable<PermissionDto> availablePermissions, RoleDto? role = null)
     {
         InitializeComponent();
+        WindowLayoutHelper.EnableResponsiveSizing(this, 0.78, 0.88);
         _permissionOptions = availablePermissions
             .OrderBy(permission => permission.PermissionCode, StringComparer.OrdinalIgnoreCase)
             .Select(permission => new SelectableOption

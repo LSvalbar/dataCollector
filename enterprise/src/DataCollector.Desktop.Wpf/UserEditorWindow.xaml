@@ -4,8 +4,10 @@
         Title="用户维护"
         Width="560"
         Height="620"
+        MinWidth="520"
+        MinHeight="500"
         WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize">
+        ResizeMode="CanResizeWithGrip">
     <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />

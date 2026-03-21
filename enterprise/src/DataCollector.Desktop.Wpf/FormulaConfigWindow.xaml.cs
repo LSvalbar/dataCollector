@@ -11,6 +11,7 @@ public partial class FormulaConfigWindow : Window
         FormulaSelection utilizationSelection)
     {
         InitializeComponent();
+        WindowLayoutHelper.EnableResponsiveSizing(this, 0.74, 0.82);
         PowerOnNumeratorComboBox.ItemsSource = options;
         PowerOnDenominatorComboBox.ItemsSource = options;
         UtilizationNumeratorComboBox.ItemsSource = options;

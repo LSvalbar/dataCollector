@@ -4,8 +4,10 @@
         Title="公式配置"
         Width="560"
         Height="420"
+        MinWidth="520"
+        MinHeight="380"
         WindowStartupLocation="CenterOwner"
-        ResizeMode="NoResize">
+        ResizeMode="CanResizeWithGrip">
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />

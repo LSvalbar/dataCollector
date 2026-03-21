@@ -31,6 +31,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        WindowLayoutHelper.EnableResponsiveSizing(this, maximizeWhenConstrained: true);
         ReportDatePicker.SelectedDate = DateTime.Today;
         TimelineDatePicker.SelectedDate = DateTime.Today;
         ApiBaseUrlTextBlock.Text = $"API：{_apiClient.BaseAddress}";

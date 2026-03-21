@@ -17,6 +17,7 @@ public partial class DeviceStatusWindow : Window
         _deviceId = deviceId;
         _deviceProvider = deviceProvider;
         InitializeComponent();
+        WindowLayoutHelper.EnableResponsiveSizing(this, 0.9, 0.9);
 
         _refreshTimer = new DispatcherTimer
         {

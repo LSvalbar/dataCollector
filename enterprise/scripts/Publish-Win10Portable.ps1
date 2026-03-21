@@ -77,6 +77,10 @@ foreach ($target in $publishTargets) {
         -p:DebugSymbols=false `
         -p:DebugType=None `
         -o $target.Output
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "dotnet publish failed for $($target.Name)"
+    }
 }
 
 $serverBat = @"

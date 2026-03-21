@@ -21,6 +21,7 @@ public partial class DeviceEditorWindow : Window
     private DeviceEditorWindow(IEnumerable<string> agentNodeOptions, DeviceDto? device, DeviceUpsertRequest? seedRequest)
     {
         InitializeComponent();
+        WindowLayoutHelper.EnableResponsiveSizing(this, 0.8, 0.9);
         var normalizedOptions = agentNodeOptions
             .Where(option => !string.IsNullOrWhiteSpace(option))
             .Select(option => option.Trim())

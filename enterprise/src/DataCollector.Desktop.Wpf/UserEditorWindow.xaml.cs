@@ -10,6 +10,7 @@ public partial class UserEditorWindow : Window
     public UserEditorWindow(IEnumerable<RoleDto> availableRoles, UserDto? user = null)
     {
         InitializeComponent();
+        WindowLayoutHelper.EnableResponsiveSizing(this, 0.78, 0.88);
         _roleOptions = availableRoles
             .OrderBy(role => role.RoleCode, StringComparer.OrdinalIgnoreCase)
             .Select(role => new SelectableOption
