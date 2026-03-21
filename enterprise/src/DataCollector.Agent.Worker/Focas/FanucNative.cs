@@ -4,6 +4,19 @@ namespace DataCollector.Agent.Worker.Focas;
 
 internal static class FanucNative
 {
+    public const short EwProtocol = -17;
+    public const short EwSocket = -16;
+    public const short EwNoDll = -15;
+    public const short EwIniError = -14;
+    public const short EwBus = -11;
+    public const short EwSystem2 = -10;
+    public const short EwHssb = -9;
+    public const short EwHandle = -8;
+    public const short EwVersion = -7;
+    public const short EwUnexpected = -6;
+    public const short EwSystem = -5;
+    public const short EwReset = -2;
+    public const short EwBusy = -1;
     public const short EwOk = 0;
     public const short PanelSignalAll = -1;
     public const short TimerPowerOn = 0;
@@ -32,6 +45,28 @@ internal static class FanucNative
 
     [DllImport("Fwlib32.dll", CallingConvention = CallingConvention.Winapi)]
     public static extern short cnc_rdtimer(ushort handle, short timerType, out IodbTime buffer);
+
+    public static string DescribeError(short code)
+    {
+        return code switch
+        {
+            EwProtocol => "EW_PROTOCOL",
+            EwSocket => "EW_SOCKET",
+            EwNoDll => "EW_NODLL",
+            EwIniError => "EW_INIERR",
+            EwBus => "EW_BUS",
+            EwSystem2 => "EW_SYSTEM2",
+            EwHssb => "EW_HSSB",
+            EwHandle => "EW_HANDLE",
+            EwVersion => "EW_VERSION",
+            EwUnexpected => "EW_UNEXP",
+            EwSystem => "EW_SYSTEM",
+            EwReset => "EW_RESET",
+            EwBusy => "EW_BUSY",
+            EwOk => "EW_OK",
+            _ => $"EW_UNKNOWN({code})",
+        };
+    }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct OdbSys

@@ -48,7 +48,16 @@ public sealed class Worker : BackgroundService
             var snapshots = new List<MachineRealtimeSnapshotDto>(sessions.Count);
             foreach (var session in sessions)
             {
-                snapshots.Add(session.Collect());
+                var snapshot = session.Collect();
+                if (snapshot is not null)
+                {
+                    snapshots.Add(snapshot);
+                }
+            }
+
+            if (snapshots.Count == 0)
+            {
+                continue;
             }
 
             try
@@ -197,7 +206,10 @@ public sealed class Worker : BackgroundService
             }
 
             var options = ToEndpointOptions(machine);
-            _sessions[machine.DeviceCode] = new FanucMachineSession(options, _logger);
+            _sessions[machine.DeviceCode] = new FanucMachineSession(
+                options,
+                _logger,
+                TimeSpan.FromSeconds(Math.Max(_options.TransientFailureToleranceSeconds, 0)));
             _logger.LogInformation("Configured runtime session for {DeviceCode} -> {IpAddress}:{Port}", machine.DeviceCode, machine.IpAddress, machine.Port);
         }
     }

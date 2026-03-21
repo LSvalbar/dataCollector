@@ -156,6 +156,7 @@ DataCollector Enterprise Win10 Runtime Notes
    - ServerBaseUrl should point to the enterprise server, normally:
      http://localhost:5180
    - AgentNodeName must match the device's Agent node in the client
+   - TransientFailureToleranceSeconds defaults to 5 seconds. Single FOCAS errors such as cnc_statinfo EW_HANDLE will retry and only become communication interruption after continuous failure beyond this threshold
    - Machine lists are now pulled automatically from the server
    - You no longer need to maintain Machines[] manually for normal usage
 

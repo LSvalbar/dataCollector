@@ -343,11 +343,11 @@
                                 <DataGridTextColumn Header="设备编码" Binding="{Binding DeviceCode}" Width="120" />
                                 <DataGridTextColumn Header="设备名称" Binding="{Binding DeviceName}" Width="150" />
                                 <DataGridTextColumn Header="当前状态" Binding="{Binding CurrentStateText}" Width="90" />
-                                <DataGridTextColumn Header="开机时间(分钟)" Binding="{Binding PowerOnMinutesText}" Width="115" />
-                                <DataGridTextColumn Header="加工时间(分钟)" Binding="{Binding ProcessingMinutesText}" Width="115" />
-                                <DataGridTextColumn Header="等待时间(分钟)" Binding="{Binding WaitingMinutesText}" Width="115" />
-                                <DataGridTextColumn Header="待机时间(分钟)" Binding="{Binding StandbyMinutesText}" Width="115" />
-                                <DataGridTextColumn Header="关机时间(分钟)" Binding="{Binding PowerOffMinutesText}" Width="115" />
+                                <DataGridTextColumn Header="开机时长" Binding="{Binding PowerOnMinutesText}" Width="115" />
+                                <DataGridTextColumn Header="加工时长" Binding="{Binding ProcessingMinutesText}" Width="115" />
+                                <DataGridTextColumn Header="等待时长" Binding="{Binding WaitingMinutesText}" Width="115" />
+                                <DataGridTextColumn Header="待机时长" Binding="{Binding StandbyMinutesText}" Width="115" />
+                                <DataGridTextColumn Header="关机时长" Binding="{Binding PowerOffMinutesText}" Width="115" />
                                 <DataGridTextColumn Header="开机率(%)" Binding="{Binding PowerOnRateText}" Width="90" />
                                 <DataGridTextColumn Header="利用率(%)" Binding="{Binding UtilizationRateText}" Width="90" />
                                 <DataGridTextColumn Header="采集质量" Binding="{Binding DataQualityText}" Width="110" />
@@ -395,7 +395,7 @@
                                 </DataGridTemplateColumn>
                                 <DataGridTextColumn Header="开始时间" Binding="{Binding StartAtText}" Width="180" />
                                 <DataGridTextColumn Header="截止时间" Binding="{Binding EndAtText}" Width="180" />
-                                <DataGridTextColumn Header="时长(秒)" Binding="{Binding DurationSecondsText}" Width="110" />
+                                <DataGridTextColumn Header="时长" Binding="{Binding DurationSecondsText}" Width="110" />
                                 <DataGridTextColumn Header="采集质量" Binding="{Binding DataQualityText}" Width="140" />
                             </DataGrid.Columns>
                         </DataGrid>

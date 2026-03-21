@@ -16,6 +16,8 @@ public sealed class AgentOptions
 
     public int ConfigurationRefreshSeconds { get; set; } = 15;
 
+    public int TransientFailureToleranceSeconds { get; set; } = 5;
+
     public List<MachineEndpointOptions> Machines { get; set; } = [];
 
     public string GetUploadEndpoint()

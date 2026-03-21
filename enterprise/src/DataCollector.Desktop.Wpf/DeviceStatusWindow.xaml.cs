@@ -103,13 +103,7 @@ public partial class DeviceStatusWindow : Window
 
     private static string FormatDuration(long? milliseconds)
     {
-        if (milliseconds is null)
-        {
-            return "-";
-        }
-
-        var totalMinutes = milliseconds.Value / 1000d / 60d;
-        return $"{totalMinutes:F1} 分钟";
+        return DurationDisplayFormatter.FormatFromMilliseconds(milliseconds);
     }
 
     private static string GetHealthText(DeviceHealthLevel healthLevel) =>

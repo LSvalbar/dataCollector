@@ -98,6 +98,8 @@ Agent 现在优先按 `Agent 节点` 从服务端自动拉取设备配置。
   轮询周期。
 - `ConfigurationRefreshSeconds`
   Agent 从服务端拉取设备配置的刷新周期。
+- `TransientFailureToleranceSeconds`
+  短暂采集失败容错秒数，默认 `5`。像 `cnc_statinfo failed with code -8 (EW_HANDLE)` 这类单次句柄异常，会先尝试重连重试；只有连续失败超过这个阈值，才会在时间线里记成 `通信中断`。
 
 正常使用时，`Machines[]` 不需要再手工维护。只要客户端设备档案里的设备绑定到了同一个 `Agent 节点`，Agent 就会自动拉下来。
 
