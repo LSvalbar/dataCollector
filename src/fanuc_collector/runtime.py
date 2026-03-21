@@ -32,6 +32,11 @@ class CollectorRuntime:
         self._config = config
         self._logger = configure_logging(config.runtime.log_path, config.runtime.log_level)
         self._stop_event = threading.Event()
+        self._offline_debounce_ms = max(
+            3000,
+            config.machine.poll_interval_ms * 6,
+            config.runtime.reconnect_initial_ms * 2,
+        )
         self._writer = StorageWriter(
             db_path=config.storage.db_path,
             max_queue_size=config.storage.queue_max_size,
@@ -47,6 +52,7 @@ class CollectorRuntime:
         previous_time = None
         last_snapshot_ms = 0
         system_info_sent = False
+        disconnect_started_at = None
 
         try:
             while not self._stop_event.is_set():
@@ -59,33 +65,39 @@ class CollectorRuntime:
                         self._config.machine.port,
                     )
 
+                    system_info = None
                     if not system_info_sent:
                         system_info = self._client.read_system_info()
-                        status = self._client.read_status()
-                        self._decorate_snapshot(status)
-                        self._enrich_status_details(status)
-                        self._apply_state_classification(status)
-                        self._writer.enqueue(
-                            WriteEnvelope(
-                                system_info=system_info,
-                                snapshot=status,
-                                latest_snapshot=status,
-                                transitions=self._build_transitions(previous_status, status),
+
+                    status = self._client.read_status()
+                    self._decorate_snapshot(status)
+                    self._enrich_status_details(status)
+                    self._apply_state_classification(status)
+
+                    reconnect_counter_delta = None
+                    if previous_status is not None and previous_time is not None and previous_status.machine_online == 1:
+                        elapsed_ms = max(0, int((status.collected_at - previous_time).total_seconds() * 1000))
+                        reconnect_counter_delta = self._build_counter_delta(previous_status, status, elapsed_ms)
+
+                    if disconnect_started_at is not None and previous_status is not None and previous_status.machine_online == 1:
+                        disconnect_ms = max(0, int((status.collected_at - disconnect_started_at).total_seconds() * 1000))
+                        if disconnect_ms < self._offline_debounce_ms:
+                            self._logger.info(
+                                "Recovered after transient communication gap %sms; suppress power_off segment",
+                                disconnect_ms,
                             )
+                    disconnect_started_at = None
+
+                    self._writer.enqueue(
+                        WriteEnvelope(
+                            system_info=system_info,
+                            snapshot=status,
+                            latest_snapshot=status,
+                            transitions=self._build_transitions(previous_status, status),
+                            counter_delta=reconnect_counter_delta,
                         )
-                        system_info_sent = True
-                    else:
-                        status = self._client.read_status()
-                        self._decorate_snapshot(status)
-                        self._enrich_status_details(status)
-                        self._apply_state_classification(status)
-                        self._writer.enqueue(
-                            WriteEnvelope(
-                                snapshot=status,
-                                latest_snapshot=status,
-                                transitions=self._build_transitions(previous_status, status),
-                            )
-                        )
+                    )
+                    system_info_sent = True
 
                     previous_status = status
                     previous_time = status.collected_at
@@ -134,24 +146,35 @@ class CollectorRuntime:
                 except (FocasCommunicationError, FocasLibraryLoadError, OSError) as exc:
                     self._logger.warning("Collector error: %s", exc)
                     now = utc_now()
-                    counter_delta = None
-                    if previous_status is not None and previous_time is not None:
-                        elapsed_ms = max(0, int((now - previous_time).total_seconds() * 1000))
-                        counter_delta = self._build_counter_delta(previous_status, MachineStatus.offline(now), elapsed_ms)
+                    if disconnect_started_at is None:
+                        disconnect_started_at = now
 
-                    offline_status = MachineStatus.offline(now)
-                    self._decorate_snapshot(offline_status)
-                    transitions = self._build_transitions(previous_status, offline_status)
-                    self._writer.enqueue(
-                        WriteEnvelope(
-                            snapshot=offline_status,
-                            latest_snapshot=offline_status,
-                            transitions=transitions,
-                            counter_delta=counter_delta,
-                        )
+                    should_confirm_offline = (
+                        previous_status is not None
+                        and previous_status.machine_online == 1
+                        and self._disconnect_duration_ms(disconnect_started_at, now) >= self._offline_debounce_ms
                     )
-                    previous_status = offline_status
-                    previous_time = now
+                    if should_confirm_offline:
+                        offline_at = disconnect_started_at
+                        counter_delta = None
+                        if previous_time is not None:
+                            elapsed_ms = max(0, int((offline_at - previous_time).total_seconds() * 1000))
+                            counter_delta = self._build_counter_delta(previous_status, MachineStatus.offline(offline_at), elapsed_ms)
+
+                        offline_status = MachineStatus.offline(offline_at)
+                        self._decorate_snapshot(offline_status)
+                        transitions = self._build_transitions(previous_status, offline_status)
+                        self._writer.enqueue(
+                            WriteEnvelope(
+                                snapshot=offline_status,
+                                latest_snapshot=offline_status,
+                                transitions=transitions,
+                                counter_delta=counter_delta,
+                            )
+                        )
+                        previous_status = offline_status
+                        previous_time = offline_at
+
                     self._client.disconnect()
 
                     if isinstance(exc, FocasLibraryLoadError):
@@ -309,6 +332,9 @@ class CollectorRuntime:
         if delta < 0:
             return None
         return delta
+
+    def _disconnect_duration_ms(self, started_at, current_at) -> int:
+        return max(0, int((current_at - started_at).total_seconds() * 1000))
 
     def _should_persist_snapshot(self, last_snapshot_ms: int, loop_started_ms: int, has_transitions: bool) -> bool:
         if has_transitions:

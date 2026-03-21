@@ -13,6 +13,7 @@ from .models import CounterDelta, MachineStatus, TimelineSegment, WriteEnvelope,
 
 
 _SENTINEL = object()
+SHORT_POWER_OFF_GAP_MS = 3000
 
 
 class StorageWriter:
@@ -536,7 +537,7 @@ def read_daily_timeline(
         state_code = _normalize_report_state_code(state_code)
         _append_timeline_segment(segments, state_code, interval_start, interval_end)
 
-    return segments
+    return _merge_short_power_off_segments(segments, SHORT_POWER_OFF_GAP_MS)
 
 
 def _resolve_report_timezone(report_tz: tzinfo_type | None) -> tzinfo_type:
@@ -582,6 +583,58 @@ def _normalize_report_state_code(state_code: str) -> str:
     if state_code == "running":
         return "waiting"
     return state_code
+
+
+def _merge_short_power_off_segments(
+    segments: list[TimelineSegment],
+    max_gap_ms: int,
+) -> list[TimelineSegment]:
+    if not segments:
+        return []
+
+    merged: list[TimelineSegment] = []
+    index = 0
+    while index < len(segments):
+        current = segments[index]
+        if current.state_code == "power_off" and current.duration_ms <= max_gap_ms:
+            previous = merged[-1] if merged else None
+            next_segment = segments[index + 1] if index + 1 < len(segments) else None
+
+            if previous is not None and next_segment is not None:
+                if previous.state_code != "power_off" and next_segment.state_code != "power_off":
+                    if previous.state_code == next_segment.state_code:
+                        previous.end_at = next_segment.end_at
+                        previous.duration_ms += current.duration_ms + next_segment.duration_ms
+                        index += 2
+                        continue
+
+                    previous.end_at = current.end_at
+                    previous.duration_ms += current.duration_ms
+                    index += 1
+                    continue
+
+            if previous is not None and previous.state_code != "power_off":
+                previous.end_at = current.end_at
+                previous.duration_ms += current.duration_ms
+                index += 1
+                continue
+
+            if next_segment is not None and next_segment.state_code != "power_off":
+                merged.append(
+                    TimelineSegment(
+                        state_code=next_segment.state_code,
+                        start_at=current.start_at,
+                        end_at=next_segment.end_at,
+                        duration_ms=current.duration_ms + next_segment.duration_ms,
+                    )
+                )
+                index += 2
+                continue
+
+        _append_timeline_segment(merged, current.state_code, current.start_at, current.end_at)
+        index += 1
+
+    return merged
 
 
 def _append_timeline_segment(

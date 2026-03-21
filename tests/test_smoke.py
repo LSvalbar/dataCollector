@@ -10,6 +10,8 @@ import time
 import unittest
 
 from src.fanuc_collector.config import load_config
+from src.fanuc_collector.focas import FocasCommunicationError
+from src.fanuc_collector.models import MachineStatus, SystemInfo, utc_now
 from src.fanuc_collector.runtime import CollectorRuntime
 
 
@@ -120,6 +122,113 @@ class SmokeTest(unittest.TestCase):
             thread.join(timeout=5)
 
             self.assertGreater(latest_count, 0)
+        finally:
+            time.sleep(0.2)
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_transient_disconnect_does_not_write_power_off_snapshot(self) -> None:
+        class FlakyClient:
+            def __init__(self):
+                self.connected = False
+                self.read_count = 0
+                self.power_ms = 0
+                self.operating_ms = 0
+                self.cutting_ms = 0
+                self.free_ms = 0
+
+            def connect(self) -> None:
+                self.connected = True
+
+            def disconnect(self) -> None:
+                self.connected = False
+
+            def read_system_info(self) -> SystemInfo:
+                return SystemInfo(
+                    max_axis_number=32,
+                    cnc_type="0",
+                    machine_type="T",
+                    series_number="D7F3",
+                    version_number="13.0",
+                    axis_count=2,
+                    additional_info=1026,
+                )
+
+            def read_status(self) -> MachineStatus:
+                self.read_count += 1
+                if self.read_count == 2:
+                    raise FocasCommunicationError("transient disconnect")
+
+                self.power_ms += 100
+                self.operating_ms += 100
+                self.cutting_ms += 80
+                collected_at = utc_now()
+                return MachineStatus(
+                    collected_at=collected_at,
+                    machine_online=1,
+                    automatic_mode=1,
+                    operation_mode=3,
+                    emergency_state=0,
+                    alarm_state=0,
+                    controller_mode_number=1,
+                    controller_mode_text="Memory",
+                    oee_status_number=3,
+                    oee_status_text="Running",
+                    native_power_on_total_ms=self.power_ms,
+                    native_operating_total_ms=self.operating_ms,
+                    native_cutting_total_ms=self.cutting_ms,
+                    native_cycle_total_ms=self.operating_ms,
+                    native_free_total_ms=self.free_ms,
+                    raw_payload={},
+                )
+
+            def read_spindle_metrics(self) -> dict[str, int]:
+                return {
+                    "spindle_speed_rpm": 1800,
+                    "spindle_override_percent": 100,
+                    "spindle_load_percent": 40,
+                }
+
+            def read_current_program(self) -> dict[str, int | str]:
+                return {
+                    "current_program_number": 1234,
+                    "current_program_name": "O1234 TEST",
+                }
+
+            def read_processing_time_records(self) -> list[dict[str, int]]:
+                return [
+                    {
+                        "program_number": 1234,
+                        "hour": 0,
+                        "minute": 1,
+                        "second": 0,
+                        "duration_ms": 60_000,
+                    }
+                ]
+
+            def read_alarm_details(self) -> list[dict[str, int | str]]:
+                return []
+
+        temp_dir = tempfile.mkdtemp(prefix="fanuc-transient-gap-test-")
+        try:
+            root = Path(temp_dir)
+            db_path = root / "collector.db"
+            log_path = root / "collector.log"
+            config_path = self._write_config(root, db_path, log_path)
+
+            runtime = CollectorRuntime(load_config(config_path))
+            runtime._client = FlakyClient()
+            thread = threading.Thread(target=runtime.run, daemon=True)
+            thread.start()
+            time.sleep(1.2)
+            runtime.stop()
+            thread.join(timeout=5)
+
+            with sqlite3.connect(db_path) as connection:
+                offline_count = connection.execute(
+                    "SELECT COUNT(*) FROM poll_snapshots WHERE machine_online = 0"
+                ).fetchone()[0]
+
+            self.assertEqual(offline_count, 0)
         finally:
             time.sleep(0.2)
             shutil.rmtree(temp_dir, ignore_errors=True)
