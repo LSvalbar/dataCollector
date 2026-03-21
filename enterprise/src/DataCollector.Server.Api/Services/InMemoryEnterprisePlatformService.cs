@@ -6,13 +6,13 @@ namespace DataCollector.Server.Api.Services;
 
 public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformService
 {
-    private static readonly (string WorkshopCode, string WorkshopName)[] WorkshopSeed =
+    private static readonly (string DepartmentCode, string DepartmentName, string WorkshopCode, string WorkshopName)[] WorkshopSeed =
     [
-        ("W01", "一车间"),
-        ("W02", "二车间"),
-        ("W03", "三车间"),
-        ("W04", "四车间"),
-        ("W05", "五车间"),
+        ("D01", "机械加工部", "W01", "一车间"),
+        ("D01", "机械加工部", "W02", "二车间"),
+        ("D01", "机械加工部", "W03", "三车间"),
+        ("D02", "精密制造部", "W04", "四车间"),
+        ("D02", "精密制造部", "W05", "五车间"),
     ];
 
     private readonly object _gate = new();
@@ -87,6 +87,8 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                 existing = new DeviceDto
                 {
                     DeviceId = request.DeviceId ?? Guid.NewGuid(),
+                    DepartmentCode = request.DepartmentCode,
+                    DepartmentName = request.DepartmentName,
                     WorkshopCode = request.WorkshopCode,
                     WorkshopName = request.WorkshopName,
                     DeviceCode = request.DeviceCode,
@@ -108,6 +110,8 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
             }
             else
             {
+                existing.DepartmentCode = request.DepartmentCode;
+                existing.DepartmentName = request.DepartmentName;
                 existing.WorkshopCode = request.WorkshopCode;
                 existing.WorkshopName = request.WorkshopName;
                 existing.DeviceCode = request.DeviceCode;
@@ -281,7 +285,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                 clone.CurrentProgramNo = clone.CurrentState is MachineOperationalState.Processing or MachineOperationalState.Waiting
                     ? $"O{Math.Abs(clone.DeviceCode.GetHashCode()) % 9000 + 1000:0000}"
                     : null;
-                clone.CurrentProgramName = clone.CurrentProgramNo is null ? null : "转轴/外圆复合加工";
+                clone.CurrentProgramName = clone.CurrentProgramNo is null ? null : "车削/外圆复合加工";
                 clone.DataQualityCode = "seed_demo";
                 ApplyLiveSnapshot(clone);
                 return clone;
@@ -304,6 +308,16 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
         device.CurrentProgramName = snapshot.CurrentProgramName;
         device.SpindleSpeedRpm = snapshot.SpindleSpeedRpm;
         device.SpindleLoadPercent = snapshot.SpindleLoadPercent;
+        device.AutomaticMode = snapshot.AutomaticMode;
+        device.OperationMode = snapshot.OperationMode;
+        device.AlarmState = snapshot.AlarmState;
+        device.EmergencyState = snapshot.EmergencyState;
+        device.ControllerModeText = snapshot.ControllerModeText;
+        device.OeeStatusText = snapshot.OeeStatusText;
+        device.NativePowerOnTotalMs = snapshot.NativePowerOnTotalMs;
+        device.NativeOperatingTotalMs = snapshot.NativeOperatingTotalMs;
+        device.NativeCuttingTotalMs = snapshot.NativeCuttingTotalMs;
+        device.NativeFreeTotalMs = snapshot.NativeFreeTotalMs;
         device.DataQualityCode = snapshot.DataQualityCode;
         device.LastCollectionError = snapshot.ErrorMessage;
         device.HealthLevel = snapshot.CurrentState switch
@@ -435,6 +449,8 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                 devices.Add(new DeviceDto
                 {
                     DeviceId = Guid.NewGuid(),
+                    DepartmentCode = workshop.DepartmentCode,
+                    DepartmentName = workshop.DepartmentName,
                     WorkshopCode = workshop.WorkshopCode,
                     WorkshopName = workshop.WorkshopName,
                     DeviceCode = $"{workshop.WorkshopCode}-CNC-{machineIndex:00}",
@@ -465,7 +481,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
             {
                 Code = "power_on_rate",
                 DisplayName = "开机率",
-                Description = "默认按当天已观测时长计算开机率。",
+                Description = "默认按当日已观测时长计算开机率。",
                 Expression = "(power_on_minutes / observed_minutes) * 100",
                 ResultUnit = "%",
                 UpdatedAt = DateTimeOffset.Now,
@@ -488,11 +504,11 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
     {
         var permissions = new[]
         {
-            new PermissionDto { PermissionCode = "device.read", PermissionName = "查看设备", Description = "查看设备列表、状态、时间线" },
-            new PermissionDto { PermissionCode = "device.write", PermissionName = "维护设备", Description = "增删改设备和采集点" },
-            new PermissionDto { PermissionCode = "report.read", PermissionName = "查看报表", Description = "查看日报、利用率和开机率" },
-            new PermissionDto { PermissionCode = "formula.write", PermissionName = "维护公式", Description = "修改开机率和利用率公式" },
-            new PermissionDto { PermissionCode = "security.write", PermissionName = "维护权限", Description = "管理用户、角色和权限" },
+            new PermissionDto { PermissionCode = "device.read", PermissionName = "查看设备", Description = "查看设备列表、状态和时间线。" },
+            new PermissionDto { PermissionCode = "device.write", PermissionName = "维护设备", Description = "增删改设备和采集点位。" },
+            new PermissionDto { PermissionCode = "report.read", PermissionName = "查看报表", Description = "查看日报、利用率和开机率。" },
+            new PermissionDto { PermissionCode = "formula.write", PermissionName = "维护公式", Description = "修改开机率和利用率公式。" },
+            new PermissionDto { PermissionCode = "security.write", PermissionName = "维护权限", Description = "管理用户、角色和权限。" },
         };
 
         var roles = new[]
@@ -547,7 +563,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                 UserCode = "mgr_w01",
                 UserName = "w01.manager",
                 DisplayName = "一车间主管",
-                Department = "一车间",
+                Department = "机械加工部",
                 RoleCodes = ["manager"],
                 IsEnabled = true,
                 LastLoginAt = DateTimeOffset.Now.AddHours(-2),
@@ -567,6 +583,8 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
         return new DeviceDto
         {
             DeviceId = source.DeviceId,
+            DepartmentCode = source.DepartmentCode,
+            DepartmentName = source.DepartmentName,
             WorkshopCode = source.WorkshopCode,
             WorkshopName = source.WorkshopName,
             DeviceCode = source.DeviceCode,
@@ -587,6 +605,16 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
             CurrentProgramName = source.CurrentProgramName,
             SpindleSpeedRpm = source.SpindleSpeedRpm,
             SpindleLoadPercent = source.SpindleLoadPercent,
+            AutomaticMode = source.AutomaticMode,
+            OperationMode = source.OperationMode,
+            AlarmState = source.AlarmState,
+            EmergencyState = source.EmergencyState,
+            ControllerModeText = source.ControllerModeText,
+            OeeStatusText = source.OeeStatusText,
+            NativePowerOnTotalMs = source.NativePowerOnTotalMs,
+            NativeOperatingTotalMs = source.NativeOperatingTotalMs,
+            NativeCuttingTotalMs = source.NativeCuttingTotalMs,
+            NativeFreeTotalMs = source.NativeFreeTotalMs,
             DataQualityCode = source.DataQualityCode,
             LastCollectionError = source.LastCollectionError,
         };

@@ -9,6 +9,8 @@ public partial class DeviceEditorWindow : Window
     {
         InitializeComponent();
         DeviceId = device?.DeviceId;
+        DepartmentCodeTextBox.Text = device?.DepartmentCode ?? "D01";
+        DepartmentNameTextBox.Text = device?.DepartmentName ?? "机械加工部";
         WorkshopCodeTextBox.Text = device?.WorkshopCode ?? string.Empty;
         WorkshopNameTextBox.Text = device?.WorkshopName ?? string.Empty;
         DeviceCodeTextBox.Text = device?.DeviceCode ?? string.Empty;
@@ -37,6 +39,8 @@ public partial class DeviceEditorWindow : Window
         Request = new DeviceUpsertRequest
         {
             DeviceId = DeviceId,
+            DepartmentCode = DepartmentCodeTextBox.Text.Trim(),
+            DepartmentName = DepartmentNameTextBox.Text.Trim(),
             WorkshopCode = WorkshopCodeTextBox.Text.Trim(),
             WorkshopName = WorkshopNameTextBox.Text.Trim(),
             DeviceCode = DeviceCodeTextBox.Text.Trim(),
@@ -50,13 +54,20 @@ public partial class DeviceEditorWindow : Window
             IsEnabled = EnabledCheckBox.IsChecked ?? true,
         };
 
-        if (string.IsNullOrWhiteSpace(Request.WorkshopCode) ||
+        if (string.IsNullOrWhiteSpace(Request.DepartmentCode) ||
+            string.IsNullOrWhiteSpace(Request.DepartmentName) ||
+            string.IsNullOrWhiteSpace(Request.WorkshopCode) ||
             string.IsNullOrWhiteSpace(Request.WorkshopName) ||
             string.IsNullOrWhiteSpace(Request.DeviceCode) ||
             string.IsNullOrWhiteSpace(Request.DeviceName) ||
             string.IsNullOrWhiteSpace(Request.IpAddress))
         {
-            MessageBox.Show(this, "车间、设备编码、设备名称和 IP 地址不能为空。", "校验失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(
+                this,
+                "部门、车间、设备编码、设备名称和 IP 地址不能为空。",
+                "校验失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
             return;
         }
 

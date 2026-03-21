@@ -11,7 +11,13 @@ public partial class MainWindow : Window
 {
     private readonly EnterpriseApiClient _apiClient = new();
     private readonly DispatcherTimer _autoRefreshTimer;
+    private readonly Brush _whiteBrush = Brushes.White;
     private List<DeviceDto> _devices = [];
+    private string _treeSignature = string.Empty;
+    private ScopeNodeType _selectedScopeType = ScopeNodeType.All;
+    private string _selectedScopeKey = "ALL";
+    private bool _autoRefreshInProgress;
+    private DeviceStatusWindow? _deviceStatusWindow;
 
     public MainWindow()
     {
@@ -22,9 +28,9 @@ public partial class MainWindow : Window
 
         _autoRefreshTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromSeconds(15),
+            Interval = TimeSpan.FromSeconds(1),
         };
-        _autoRefreshTimer.Tick += async (_, _) => await RefreshOverviewAsync(false);
+        _autoRefreshTimer.Tick += AutoRefreshTimer_Tick;
 
         Loaded += async (_, _) =>
         {
@@ -34,8 +40,31 @@ public partial class MainWindow : Window
         Closed += (_, _) =>
         {
             _autoRefreshTimer.Stop();
+            _deviceStatusWindow?.Close();
             _apiClient.Dispose();
         };
+    }
+
+    private async void AutoRefreshTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_autoRefreshInProgress)
+        {
+            return;
+        }
+
+        _autoRefreshInProgress = true;
+        try
+        {
+            await RefreshOverviewAsync(false);
+            if (TimelineTab.IsSelected && TimelineDatePicker.SelectedDate?.Date == DateTime.Today)
+            {
+                await RefreshTimelineAsync(false);
+            }
+        }
+        finally
+        {
+            _autoRefreshInProgress = false;
+        }
     }
 
     private async Task RefreshAllAsync(bool showErrors)
@@ -50,7 +79,7 @@ public partial class MainWindow : Window
                 {
                     MessageBox.Show(
                         this,
-                        "未连接到正式服务端，请先启动 enterprise 服务端 API。",
+                        "未连接到正式服务端，请先启动服务端 API。",
                         "服务不可用",
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
@@ -86,35 +115,21 @@ public partial class MainWindow : Window
                 return;
             }
 
-            _devices = overview.Devices.ToList();
-            OverviewSummaryTextBlock.Text = $"共 {_devices.Count} 台设备 | 快照时间 {overview.SnapshotAt:yyyy-MM-dd HH:mm:ss}";
-            DrawWorkshopCards(overview.Workshops);
-            DevicesGrid.ItemsSource = _devices.Select(ToDeviceGridRow).ToList();
-
-            var selectedDeviceId = TimelineDeviceComboBox.SelectedValue as Guid?;
-            TimelineDeviceComboBox.ItemsSource = _devices
-                .OrderBy(device => device.WorkshopCode)
+            UpdateServerStatus(true);
+            LastOverviewRefreshTextBlock.Text = $"最近刷新：{overview.SnapshotAt:yyyy-MM-dd HH:mm:ss}";
+            _devices = overview.Devices
+                .OrderBy(device => device.DepartmentCode)
+                .ThenBy(device => device.WorkshopCode)
                 .ThenBy(device => device.DeviceCode)
-                .Select(device => new TimelineDeviceItem
-                {
-                    DeviceId = device.DeviceId,
-                    DisplayText = $"{device.WorkshopName} | {device.DeviceCode} | {device.DeviceName}",
-                })
                 .ToList();
 
-            if (selectedDeviceId.HasValue &&
-                TimelineDeviceComboBox.ItemsSource is IEnumerable<TimelineDeviceItem> items &&
-                items.Any(item => item.DeviceId == selectedDeviceId.Value))
-            {
-                TimelineDeviceComboBox.SelectedValue = selectedDeviceId.Value;
-            }
-            else
-            {
-                TimelineDeviceComboBox.SelectedIndex = 0;
-            }
+            EnsureTreeStructure();
+            ApplyScopeToView(overview.SnapshotAt);
+            RefreshTimelineDeviceList();
         }
         catch (Exception exception)
         {
+            UpdateServerStatus(false);
             if (showErrors)
             {
                 MessageBox.Show(this, exception.Message, "设备刷新失败", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -173,6 +188,8 @@ public partial class MainWindow : Window
                 EndAtText = segment.EndAt.ToString("yyyy-MM-dd HH:mm:ss"),
                 DurationMinutesText = segment.DurationMinutes.ToString("F2"),
                 DataQualityCode = segment.DataQualityCode,
+                StateBackground = GetStateBackground(segment.State),
+                StateForeground = GetStateForeground(segment.State),
             }).ToList();
         }
         catch (Exception exception)
@@ -223,43 +240,141 @@ public partial class MainWindow : Window
         }
     }
 
-    private void DrawWorkshopCards(IEnumerable<WorkshopSummaryDto> workshops)
+    private void EnsureTreeStructure()
     {
-        WorkshopCardsPanel.Children.Clear();
-        foreach (var workshop in workshops)
-        {
-            var accent = workshop.AlarmCount > 0 || workshop.EmergencyCount > 0 ? "#A63B32" : "#1F6AA5";
-            var border = new Border
-            {
-                Width = 280,
-                Margin = new Thickness(0, 0, 14, 14),
-                Padding = new Thickness(16),
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFFFFF")),
-                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(accent)),
-                BorderThickness = new Thickness(2),
-                CornerRadius = new CornerRadius(10),
-            };
+        var newSignature = string.Join(
+            "|",
+            _devices.Select(device =>
+                $"{device.DepartmentCode}:{device.DepartmentName}:{device.WorkshopCode}:{device.WorkshopName}:{device.DeviceId}:{device.DeviceCode}:{device.DeviceName}"));
 
-            var stack = new StackPanel();
-            stack.Children.Add(new TextBlock
-            {
-                Text = workshop.WorkshopName,
-                FontWeight = FontWeights.Bold,
-                FontSize = 16,
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#172635")),
-            });
-            stack.Children.Add(new TextBlock
-            {
-                Margin = new Thickness(0, 8, 0, 0),
-                Text = $"设备总数：{workshop.MachineCount}",
-                Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#37516B")),
-            });
-            stack.Children.Add(new TextBlock { Text = $"加工：{workshop.ProcessingCount} | 等待：{workshop.WaitingCount} | 待机：{workshop.StandbyCount}" });
-            stack.Children.Add(new TextBlock { Text = $"报警：{workshop.AlarmCount} | 急停：{workshop.EmergencyCount} | 关机：{workshop.PowerOffCount}" });
-            stack.Children.Add(new TextBlock { Text = $"通信中断：{workshop.CommunicationInterruptedCount}" });
-            border.Child = stack;
-            WorkshopCardsPanel.Children.Add(border);
+        if (newSignature == _treeSignature)
+        {
+            return;
         }
+
+        _treeSignature = newSignature;
+        DeviceTreeView.ItemsSource = _devices
+            .GroupBy(device => new { device.DepartmentCode, device.DepartmentName })
+            .OrderBy(group => group.Key.DepartmentCode)
+            .Select(departmentGroup => new OrganizationTreeNode
+            {
+                NodeType = ScopeNodeType.Department,
+                ScopeKey = departmentGroup.Key.DepartmentCode,
+                Title = departmentGroup.Key.DepartmentName,
+                Subtitle = $"{departmentGroup.Count()} 台机床",
+                Glyph = "\uE80F",
+                AccentBackground = CreateBrush("#DBEAFE"),
+                AccentForeground = CreateBrush("#1D4ED8"),
+                Children = departmentGroup
+                    .GroupBy(device => new { device.WorkshopCode, device.WorkshopName })
+                    .OrderBy(group => group.Key.WorkshopCode)
+                    .Select(workshopGroup => new OrganizationTreeNode
+                    {
+                        NodeType = ScopeNodeType.Workshop,
+                        ScopeKey = workshopGroup.Key.WorkshopCode,
+                        Title = workshopGroup.Key.WorkshopName,
+                        Subtitle = $"{workshopGroup.Count()} 台机床",
+                        Glyph = "\uE7F1",
+                        AccentBackground = CreateBrush("#E0F2FE"),
+                        AccentForeground = CreateBrush("#0369A1"),
+                        Children = workshopGroup
+                            .OrderBy(device => device.DeviceCode)
+                            .Select(device => new OrganizationTreeNode
+                            {
+                                NodeType = ScopeNodeType.Device,
+                                ScopeKey = device.DeviceId.ToString(),
+                                DeviceId = device.DeviceId,
+                                Title = $"{device.DeviceCode} · {device.DeviceName}",
+                                Subtitle = $"{device.ControllerModel} | {device.IpAddress}:{device.Port}",
+                                Glyph = "\uE9CE",
+                                AccentBackground = CreateBrush("#E2E8F0"),
+                                AccentForeground = CreateBrush("#334155"),
+                            })
+                            .ToList(),
+                    })
+                    .ToList(),
+            })
+            .ToList();
+    }
+
+    private void ApplyScopeToView(DateTimeOffset snapshotAt)
+    {
+        var filteredDevices = GetFilteredDevices();
+        var scopeLabel = ResolveScopeLabel(filteredDevices);
+        ScopeSummaryTextBlock.Text = scopeLabel;
+        OverviewSummaryTextBlock.Text = $"共 {filteredDevices.Count} 台设备 | 快照时间 {snapshotAt:yyyy-MM-dd HH:mm:ss} | 自动刷新 1 秒";
+        DrawScopeCards(filteredDevices);
+
+        var previousSelectedId = (DevicesGrid.SelectedItem as DeviceGridRow)?.DeviceId;
+        var rows = filteredDevices.Select(ToDeviceGridRow).ToList();
+        DevicesGrid.ItemsSource = rows;
+        if (previousSelectedId.HasValue)
+        {
+            DevicesGrid.SelectedItem = rows.FirstOrDefault(row => row.DeviceId == previousSelectedId.Value);
+        }
+    }
+
+    private void DrawScopeCards(IReadOnlyList<DeviceDto> devices)
+    {
+        ScopeCardsPanel.Children.Clear();
+
+        var cards = new[]
+        {
+            CreateMetricCard("设备总数", devices.Count.ToString(), "当前筛选范围", "#DBEAFE", "#1D4ED8"),
+            CreateMetricCard("加工中", devices.Count(device => device.CurrentState == MachineOperationalState.Processing).ToString(), "绿灯 = 正在加工", "#DCFCE7", "#15803D"),
+            CreateMetricCard("等待中", devices.Count(device => device.CurrentState == MachineOperationalState.Waiting).ToString(), "黄灯 = 等待/暂停", "#FEF3C7", "#B45309"),
+            CreateMetricCard("待机", devices.Count(device => device.CurrentState == MachineOperationalState.Standby).ToString(), "黄灯 = 已开机待命", "#FEF3C7", "#92400E"),
+            CreateMetricCard("关机", devices.Count(device => device.CurrentState == MachineOperationalState.PowerOff).ToString(), "灰灯 = 已关机", "#E2E8F0", "#475569"),
+            CreateMetricCard("异常", devices.Count(device => device.CurrentState is MachineOperationalState.Alarm or MachineOperationalState.Emergency or MachineOperationalState.CommunicationInterrupted).ToString(), "报警/急停/断连", "#FEE2E2", "#B91C1C"),
+        };
+
+        foreach (var card in cards)
+        {
+            ScopeCardsPanel.Children.Add(card);
+        }
+    }
+
+    private Border CreateMetricCard(string title, string value, string hint, string background, string foreground)
+    {
+        var border = new Border
+        {
+            Width = 188,
+            Margin = new Thickness(0, 0, 12, 12),
+            Padding = new Thickness(16),
+            Background = CreateBrush(background),
+            CornerRadius = new CornerRadius(16),
+        };
+
+        border.Child = new StackPanel
+        {
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = title,
+                    Foreground = CreateBrush(foreground),
+                    FontWeight = FontWeights.SemiBold,
+                },
+                new TextBlock
+                {
+                    Margin = new Thickness(0, 10, 0, 0),
+                    Text = value,
+                    Foreground = CreateBrush(foreground),
+                    FontSize = 28,
+                    FontWeight = FontWeights.Bold,
+                },
+                new TextBlock
+                {
+                    Margin = new Thickness(0, 8, 0, 0),
+                    Text = hint,
+                    Foreground = CreateBrush(foreground),
+                    Opacity = 0.85,
+                    TextWrapping = TextWrapping.Wrap,
+                },
+            },
+        };
+
+        return border;
     }
 
     private void DrawTimelineTotals(IReadOnlyDictionary<string, double> totals)
@@ -270,23 +385,99 @@ public partial class MainWindow : Window
             var border = new Border
             {
                 Width = 190,
-                Margin = new Thickness(0, 0, 10, 10),
-                Padding = new Thickness(12),
-                Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFFFFF")),
-                BorderBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D8E2F0")),
+                Margin = new Thickness(0, 0, 12, 12),
+                Padding = new Thickness(14),
+                Background = _whiteBrush,
+                BorderBrush = CreateBrush("#D8E2F0"),
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(8),
+                CornerRadius = new CornerRadius(16),
             };
+
             border.Child = new StackPanel
             {
                 Children =
                 {
-                    new TextBlock { Text = total.Key, FontWeight = FontWeights.SemiBold, Foreground = Brushes.DarkSlateBlue },
-                    new TextBlock { Margin = new Thickness(0, 6, 0, 0), Text = $"{total.Value:F2} 分钟", FontSize = 16, FontWeight = FontWeights.Bold },
+                    new TextBlock
+                    {
+                        Text = total.Key,
+                        Foreground = CreateBrush("#475569"),
+                        FontWeight = FontWeights.SemiBold,
+                    },
+                    new TextBlock
+                    {
+                        Margin = new Thickness(0, 8, 0, 0),
+                        Text = $"{total.Value:F2} 分钟",
+                        FontSize = 20,
+                        FontWeight = FontWeights.Bold,
+                        Foreground = CreateBrush("#0F172A"),
+                    },
                 },
             };
             TimelineTotalsPanel.Children.Add(border);
         }
+    }
+
+    private void RefreshTimelineDeviceList()
+    {
+        var selectedDeviceId = TimelineDeviceComboBox.SelectedValue is Guid deviceId ? deviceId : (Guid?)null;
+        var items = _devices
+            .OrderBy(device => device.WorkshopCode)
+            .ThenBy(device => device.DeviceCode)
+            .Select(device => new TimelineDeviceItem
+            {
+                DeviceId = device.DeviceId,
+                DisplayText = $"{device.DepartmentName} / {device.WorkshopName} / {device.DeviceCode}",
+            })
+            .ToList();
+
+        TimelineDeviceComboBox.ItemsSource = items;
+        if (selectedDeviceId.HasValue && items.Any(item => item.DeviceId == selectedDeviceId.Value))
+        {
+            TimelineDeviceComboBox.SelectedValue = selectedDeviceId.Value;
+        }
+        else
+        {
+            TimelineDeviceComboBox.SelectedIndex = items.Count > 0 ? 0 : -1;
+        }
+    }
+
+    private IReadOnlyList<DeviceDto> GetFilteredDevices()
+    {
+        return _devices.Where(MatchesSelectedScope).ToList();
+    }
+
+    private bool MatchesSelectedScope(DeviceDto device)
+    {
+        return _selectedScopeType switch
+        {
+            ScopeNodeType.Department => device.DepartmentCode == _selectedScopeKey,
+            ScopeNodeType.Workshop => device.WorkshopCode == _selectedScopeKey,
+            ScopeNodeType.Device => device.DeviceId.ToString() == _selectedScopeKey,
+            _ => true,
+        };
+    }
+
+    private string ResolveScopeLabel(IReadOnlyList<DeviceDto> filteredDevices)
+    {
+        if (_selectedScopeType == ScopeNodeType.Device)
+        {
+            var device = filteredDevices.FirstOrDefault();
+            return device is null ? "设备详情" : $"{device.DepartmentName} / {device.WorkshopName} / {device.DeviceName}";
+        }
+
+        if (_selectedScopeType == ScopeNodeType.Workshop)
+        {
+            var device = filteredDevices.FirstOrDefault();
+            return device is null ? "车间设备" : $"{device.DepartmentName} / {device.WorkshopName}";
+        }
+
+        if (_selectedScopeType == ScopeNodeType.Department)
+        {
+            var device = filteredDevices.FirstOrDefault();
+            return device is null ? "部门设备" : device.DepartmentName;
+        }
+
+        return "全部设备";
     }
 
     private async Task SaveFormulaAsync(string code, string expression)
@@ -303,20 +494,65 @@ public partial class MainWindow : Window
         MessageBox.Show(this, "公式已保存。", "保存成功", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
+    private void UpdateServerStatus(bool online)
+    {
+        ServerStatusTextBlock.Text = online ? "服务状态：在线" : "服务状态：离线";
+        ServerStatusTextBlock.Foreground = online ? CreateBrush("#BBF7D0") : Brushes.OrangeRed;
+    }
+
+    private DeviceDto? GetSelectedDevice()
+    {
+        if (DevicesGrid.SelectedItem is DeviceGridRow row)
+        {
+            return _devices.FirstOrDefault(device => device.DeviceId == row.DeviceId);
+        }
+
+        if (DeviceTreeView.SelectedItem is OrganizationTreeNode node && node.DeviceId.HasValue)
+        {
+            return _devices.FirstOrDefault(device => device.DeviceId == node.DeviceId.Value);
+        }
+
+        return null;
+    }
+
+    private void OpenDeviceStatus(DeviceDto device)
+    {
+        if (_deviceStatusWindow is not null)
+        {
+            _deviceStatusWindow.Close();
+        }
+
+        _deviceStatusWindow = new DeviceStatusWindow(
+            device.DeviceId,
+            () => _devices.FirstOrDefault(item => item.DeviceId == device.DeviceId))
+        {
+            Owner = this,
+        };
+        _deviceStatusWindow.Closed += (_, _) => _deviceStatusWindow = null;
+        _deviceStatusWindow.Show();
+    }
+
     private static DeviceGridRow ToDeviceGridRow(DeviceDto device)
     {
+        var stateBackground = GetStateBackground(device.CurrentState);
+        var healthBackground = GetHealthBackground(device.HealthLevel);
+        var onlineBackground = device.MachineOnline ? CreateBrush("#DCFCE7") : CreateBrush("#E2E8F0");
+
         return new DeviceGridRow
         {
             DeviceId = device.DeviceId,
+            DepartmentName = device.DepartmentName,
             WorkshopName = device.WorkshopName,
             DeviceCode = device.DeviceCode,
             DeviceName = device.DeviceName,
             ControllerModel = device.ControllerModel,
             IpAddress = device.IpAddress,
-            Port = device.Port,
-            AgentNodeName = device.AgentNodeName,
             MachineOnlineText = device.MachineOnline ? "在线" : "离线",
+            OnlineBackground = onlineBackground,
+            OnlineForeground = device.MachineOnline ? CreateBrush("#166534") : CreateBrush("#475569"),
             StateText = device.CurrentState.ToDisplayName(),
+            StateBackground = stateBackground,
+            StateForeground = GetStateForeground(device.CurrentState),
             HealthText = device.HealthLevel switch
             {
                 DeviceHealthLevel.Normal => "正常",
@@ -324,13 +560,20 @@ public partial class MainWindow : Window
                 DeviceHealthLevel.Critical => "异常",
                 _ => "未知",
             },
+            HealthBackground = healthBackground,
+            HealthForeground = device.HealthLevel switch
+            {
+                DeviceHealthLevel.Normal => CreateBrush("#166534"),
+                DeviceHealthLevel.Warning => CreateBrush("#92400E"),
+                DeviceHealthLevel.Critical => CreateBrush("#991B1B"),
+                _ => CreateBrush("#475569"),
+            },
             CurrentProgramNo = device.CurrentProgramNo ?? "-",
-            SpindleSpeedText = device.SpindleSpeedRpm?.ToString() ?? "-",
+            SpindleSpeedText = device.SpindleSpeedRpm is null ? "-" : $"{device.SpindleSpeedRpm} rpm",
             SpindleLoadText = device.SpindleLoadPercent is null ? "-" : $"{device.SpindleLoadPercent:F1}%",
             DataQualityCode = device.DataQualityCode ?? "-",
             LastCollectedAtText = device.LastCollectedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-",
             LastHeartbeatAtText = device.LastHeartbeatAt.ToString("yyyy-MM-dd HH:mm:ss"),
-            LastCollectionError = string.IsNullOrWhiteSpace(device.LastCollectionError) ? "-" : device.LastCollectionError,
         };
     }
 
@@ -353,51 +596,57 @@ public partial class MainWindow : Window
         };
     }
 
-    private void UpdateServerStatus(bool online)
-    {
-        ServerStatusTextBlock.Text = online ? "服务状态：在线" : "服务状态：离线";
-        ServerStatusTextBlock.Foreground = online ? Brushes.LightGreen : Brushes.OrangeRed;
-    }
-
-    private DeviceDto? GetSelectedDevice()
-    {
-        if (DevicesGrid.SelectedItem is not DeviceGridRow row)
+    private static Brush GetStateBackground(MachineOperationalState state) =>
+        state switch
         {
-            return null;
-        }
+            MachineOperationalState.Processing => CreateBrush("#DCFCE7"),
+            MachineOperationalState.Waiting => CreateBrush("#FEF3C7"),
+            MachineOperationalState.Standby => CreateBrush("#FEF3C7"),
+            MachineOperationalState.PowerOff => CreateBrush("#E2E8F0"),
+            MachineOperationalState.Alarm => CreateBrush("#FEE2E2"),
+            MachineOperationalState.Emergency => CreateBrush("#FECACA"),
+            MachineOperationalState.CommunicationInterrupted => CreateBrush("#F5E8FF"),
+            _ => CreateBrush("#E2E8F0"),
+        };
 
-        return _devices.FirstOrDefault(device => device.DeviceId == row.DeviceId);
-    }
+    private static Brush GetStateForeground(MachineOperationalState state) =>
+        state switch
+        {
+            MachineOperationalState.Processing => CreateBrush("#166534"),
+            MachineOperationalState.Waiting => CreateBrush("#92400E"),
+            MachineOperationalState.Standby => CreateBrush("#92400E"),
+            MachineOperationalState.PowerOff => CreateBrush("#475569"),
+            MachineOperationalState.Alarm => CreateBrush("#B91C1C"),
+            MachineOperationalState.Emergency => CreateBrush("#991B1B"),
+            MachineOperationalState.CommunicationInterrupted => CreateBrush("#6D28D9"),
+            _ => CreateBrush("#475569"),
+        };
 
-    private async void RefreshAllButton_Click(object sender, RoutedEventArgs e)
+    private static Brush GetHealthBackground(DeviceHealthLevel healthLevel) =>
+        healthLevel switch
+        {
+            DeviceHealthLevel.Normal => CreateBrush("#DCFCE7"),
+            DeviceHealthLevel.Warning => CreateBrush("#FEF3C7"),
+            DeviceHealthLevel.Critical => CreateBrush("#FEE2E2"),
+            _ => CreateBrush("#E2E8F0"),
+        };
+
+    private static Brush CreateBrush(string hex)
     {
-        await RefreshAllAsync(true);
+        return (Brush)new BrushConverter().ConvertFromString(hex)!;
     }
 
-    private async void RefreshOverviewButton_Click(object sender, RoutedEventArgs e)
-    {
-        await RefreshOverviewAsync(true);
-    }
+    private async void RefreshAllButton_Click(object sender, RoutedEventArgs e) => await RefreshAllAsync(true);
 
-    private async void RefreshReportButton_Click(object sender, RoutedEventArgs e)
-    {
-        await RefreshReportAsync(true);
-    }
+    private async void RefreshOverviewButton_Click(object sender, RoutedEventArgs e) => await RefreshOverviewAsync(true);
 
-    private async void RefreshTimelineButton_Click(object sender, RoutedEventArgs e)
-    {
-        await RefreshTimelineAsync(true);
-    }
+    private async void RefreshReportButton_Click(object sender, RoutedEventArgs e) => await RefreshReportAsync(true);
 
-    private async void SavePowerOnFormulaButton_Click(object sender, RoutedEventArgs e)
-    {
-        await SaveFormulaAsync("power_on_rate", PowerOnFormulaTextBox.Text);
-    }
+    private async void RefreshTimelineButton_Click(object sender, RoutedEventArgs e) => await RefreshTimelineAsync(true);
 
-    private async void SaveUtilizationFormulaButton_Click(object sender, RoutedEventArgs e)
-    {
-        await SaveFormulaAsync("utilization_rate", UtilizationFormulaTextBox.Text);
-    }
+    private async void SavePowerOnFormulaButton_Click(object sender, RoutedEventArgs e) => await SaveFormulaAsync("power_on_rate", PowerOnFormulaTextBox.Text);
+
+    private async void SaveUtilizationFormulaButton_Click(object sender, RoutedEventArgs e) => await SaveFormulaAsync("utilization_rate", UtilizationFormulaTextBox.Text);
 
     private async void AddDeviceButton_Click(object sender, RoutedEventArgs e)
     {
@@ -448,26 +697,79 @@ public partial class MainWindow : Window
         await RefreshOverviewAsync(true);
     }
 
+    private void DeviceTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (e.NewValue is not OrganizationTreeNode node)
+        {
+            _selectedScopeType = ScopeNodeType.All;
+            _selectedScopeKey = "ALL";
+        }
+        else
+        {
+            _selectedScopeType = node.NodeType;
+            _selectedScopeKey = node.ScopeKey;
+        }
+
+        ApplyScopeToView(DateTimeOffset.Now);
+    }
+
+    private void DeviceTreeView_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (DeviceTreeView.SelectedItem is OrganizationTreeNode node && node.NodeType == ScopeNodeType.Device)
+        {
+            var device = _devices.FirstOrDefault(item => item.DeviceId == node.DeviceId);
+            if (device is not null)
+            {
+                OpenDeviceStatus(device);
+            }
+        }
+    }
+
+    private void DevicesGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var device = GetSelectedDevice();
+        if (device is not null)
+        {
+            OpenDeviceStatus(device);
+        }
+    }
+
+    private void OpenSelectedDeviceButton_Click(object sender, RoutedEventArgs e)
+    {
+        var device = GetSelectedDevice();
+        if (device is null)
+        {
+            MessageBox.Show(this, "请先在设备表格或树菜单中选择一台机床。", "未选择设备", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        OpenDeviceStatus(device);
+    }
+
     private sealed class DeviceGridRow
     {
         public Guid DeviceId { get; init; }
+        public required string DepartmentName { get; init; }
         public required string WorkshopName { get; init; }
         public required string DeviceCode { get; init; }
         public required string DeviceName { get; init; }
         public required string ControllerModel { get; init; }
         public required string IpAddress { get; init; }
-        public int Port { get; init; }
-        public required string AgentNodeName { get; init; }
         public required string MachineOnlineText { get; init; }
+        public required Brush OnlineBackground { get; init; }
+        public required Brush OnlineForeground { get; init; }
         public required string StateText { get; init; }
+        public required Brush StateBackground { get; init; }
+        public required Brush StateForeground { get; init; }
         public required string HealthText { get; init; }
+        public required Brush HealthBackground { get; init; }
+        public required Brush HealthForeground { get; init; }
         public required string CurrentProgramNo { get; init; }
         public required string SpindleSpeedText { get; init; }
         public required string SpindleLoadText { get; init; }
         public required string DataQualityCode { get; init; }
         public required string LastCollectedAtText { get; init; }
         public required string LastHeartbeatAtText { get; init; }
-        public required string LastCollectionError { get; init; }
     }
 
     private sealed class DailyReportGridRow
@@ -493,6 +795,8 @@ public partial class MainWindow : Window
         public required string EndAtText { get; init; }
         public required string DurationMinutesText { get; init; }
         public required string DataQualityCode { get; init; }
+        public required Brush StateBackground { get; init; }
+        public required Brush StateForeground { get; init; }
     }
 
     private sealed class TimelineDeviceItem
@@ -518,4 +822,33 @@ public partial class MainWindow : Window
         public required string Description { get; init; }
         public int PermissionCount { get; init; }
     }
+}
+
+public enum ScopeNodeType
+{
+    All = 0,
+    Department = 1,
+    Workshop = 2,
+    Device = 3,
+}
+
+public sealed class OrganizationTreeNode
+{
+    public ScopeNodeType NodeType { get; init; }
+
+    public required string ScopeKey { get; init; }
+
+    public Guid? DeviceId { get; init; }
+
+    public required string Title { get; init; }
+
+    public required string Subtitle { get; init; }
+
+    public required string Glyph { get; init; }
+
+    public required Brush AccentBackground { get; init; }
+
+    public required Brush AccentForeground { get; init; }
+
+    public List<OrganizationTreeNode> Children { get; init; } = [];
 }

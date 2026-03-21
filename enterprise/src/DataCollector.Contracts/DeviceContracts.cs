@@ -27,6 +27,10 @@ public sealed class DeviceDto
 {
     public Guid DeviceId { get; set; }
 
+    public required string DepartmentCode { get; set; }
+
+    public required string DepartmentName { get; set; }
+
     public required string WorkshopCode { get; set; }
 
     public required string WorkshopName { get; set; }
@@ -67,6 +71,26 @@ public sealed class DeviceDto
 
     public double? SpindleLoadPercent { get; set; }
 
+    public int AutomaticMode { get; set; }
+
+    public int OperationMode { get; set; }
+
+    public bool AlarmState { get; set; }
+
+    public bool EmergencyState { get; set; }
+
+    public string? ControllerModeText { get; set; }
+
+    public string? OeeStatusText { get; set; }
+
+    public long? NativePowerOnTotalMs { get; set; }
+
+    public long? NativeOperatingTotalMs { get; set; }
+
+    public long? NativeCuttingTotalMs { get; set; }
+
+    public long? NativeFreeTotalMs { get; set; }
+
     public string? DataQualityCode { get; set; }
 
     public string? LastCollectionError { get; set; }
@@ -75,6 +99,10 @@ public sealed class DeviceDto
 public sealed class DeviceUpsertRequest
 {
     public Guid? DeviceId { get; set; }
+
+    public required string DepartmentCode { get; set; }
+
+    public required string DepartmentName { get; set; }
 
     public required string WorkshopCode { get; set; }
 
