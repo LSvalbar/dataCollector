@@ -1,0 +1,185 @@
+using System.Globalization;
+using DataCollector.Contracts;
+
+namespace DataCollector.Core.Formula;
+
+public sealed class FormulaEngine
+{
+    private static readonly Dictionary<char, int> OperatorPrecedence = new()
+    {
+        ['+'] = 1,
+        ['-'] = 1,
+        ['*'] = 2,
+        ['/'] = 2,
+    };
+
+    public double Evaluate(string expression, IReadOnlyDictionary<string, double> variables)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(expression);
+        ArgumentNullException.ThrowIfNull(variables);
+
+        var rpn = ToReversePolishNotation(expression);
+        var stack = new Stack<double>();
+
+        foreach (var token in rpn)
+        {
+            if (double.TryParse(token, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
+            {
+                stack.Push(number);
+                continue;
+            }
+
+            if (token.Length == 1 && OperatorPrecedence.ContainsKey(token[0]))
+            {
+                if (stack.Count < 2)
+                {
+                    throw new InvalidOperationException($"公式 \"{expression}\" 语法无效。");
+                }
+
+                var right = stack.Pop();
+                var left = stack.Pop();
+                stack.Push(ApplyOperator(token[0], left, right));
+                continue;
+            }
+
+            if (!variables.TryGetValue(token, out var variableValue))
+            {
+                throw new InvalidOperationException($"公式变量 \"{token}\" 未定义。");
+            }
+
+            stack.Push(variableValue);
+        }
+
+        if (stack.Count != 1)
+        {
+            throw new InvalidOperationException($"公式 \"{expression}\" 无法被正确计算。");
+        }
+
+        return Math.Round(stack.Pop(), 2, MidpointRounding.AwayFromZero);
+    }
+
+    public IReadOnlyDictionary<string, double> BuildVariableMap(DailyMetricsSnapshot metrics)
+    {
+        return new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["power_on_minutes"] = metrics.PowerOnMinutes,
+            ["processing_minutes"] = metrics.ProcessingMinutes,
+            ["waiting_minutes"] = metrics.WaitingMinutes,
+            ["standby_minutes"] = metrics.StandbyMinutes,
+            ["power_off_minutes"] = metrics.PowerOffMinutes,
+            ["alarm_minutes"] = metrics.AlarmMinutes,
+            ["emergency_minutes"] = metrics.EmergencyMinutes,
+            ["communication_interrupted_minutes"] = metrics.CommunicationInterruptedMinutes,
+            ["observed_minutes"] = metrics.ObservedMinutes,
+            ["calendar_day_minutes"] = 1440d,
+        };
+    }
+
+    private static IEnumerable<string> ToReversePolishNotation(string expression)
+    {
+        var output = new List<string>();
+        var operators = new Stack<char>();
+        var index = 0;
+
+        while (index < expression.Length)
+        {
+            var current = expression[index];
+
+            if (char.IsWhiteSpace(current))
+            {
+                index++;
+                continue;
+            }
+
+            if (char.IsLetter(current) || current == '_')
+            {
+                var start = index;
+                index++;
+                while (index < expression.Length && (char.IsLetterOrDigit(expression[index]) || expression[index] == '_'))
+                {
+                    index++;
+                }
+
+                output.Add(expression[start..index]);
+                continue;
+            }
+
+            if (char.IsDigit(current) || current == '.')
+            {
+                var start = index;
+                index++;
+                while (index < expression.Length && (char.IsDigit(expression[index]) || expression[index] == '.'))
+                {
+                    index++;
+                }
+
+                output.Add(expression[start..index]);
+                continue;
+            }
+
+            if (OperatorPrecedence.ContainsKey(current))
+            {
+                while (operators.Count > 0 &&
+                       OperatorPrecedence.TryGetValue(operators.Peek(), out var precedence) &&
+                       precedence >= OperatorPrecedence[current])
+                {
+                    output.Add(operators.Pop().ToString());
+                }
+
+                operators.Push(current);
+                index++;
+                continue;
+            }
+
+            if (current == '(')
+            {
+                operators.Push(current);
+                index++;
+                continue;
+            }
+
+            if (current == ')')
+            {
+                while (operators.Count > 0 && operators.Peek() != '(')
+                {
+                    output.Add(operators.Pop().ToString());
+                }
+
+                if (operators.Count == 0 || operators.Pop() != '(')
+                {
+                    throw new InvalidOperationException($"公式 \"{expression}\" 括号不匹配。");
+                }
+
+                index++;
+                continue;
+            }
+
+            throw new InvalidOperationException($"公式包含不支持的字符 \"{current}\"。");
+        }
+
+        while (operators.Count > 0)
+        {
+            var symbol = operators.Pop();
+            if (symbol is '(' or ')')
+            {
+                throw new InvalidOperationException($"公式 \"{expression}\" 括号不匹配。");
+            }
+
+            output.Add(symbol.ToString());
+        }
+
+        return output;
+    }
+
+    private static double ApplyOperator(char operatorToken, double left, double right)
+    {
+        return operatorToken switch
+        {
+            '+' => left + right,
+            '-' => left - right,
+            '*' => left * right,
+            '/' => Math.Abs(right) < double.Epsilon ? 0d : left / right,
+            _ => throw new InvalidOperationException($"不支持的运算符 \"{operatorToken}\"。"),
+        };
+    }
+}

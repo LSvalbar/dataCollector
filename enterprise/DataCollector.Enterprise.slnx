@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DataCollector.Agent.Worker/DataCollector.Agent.Worker.csproj" />
+    <Project Path="src/DataCollector.Contracts/DataCollector.Contracts.csproj" />
+    <Project Path="src/DataCollector.Core/DataCollector.Core.csproj" />
+    <Project Path="src/DataCollector.Desktop.Wpf/DataCollector.Desktop.Wpf.csproj" />
+    <Project Path="src/DataCollector.Server.Api/DataCollector.Server.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DataCollector.Core.Tests/DataCollector.Core.Tests.csproj" />
+  </Folder>
+</Solution>
