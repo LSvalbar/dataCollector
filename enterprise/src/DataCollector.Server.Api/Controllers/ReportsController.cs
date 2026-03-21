@@ -29,8 +29,15 @@ public sealed class ReportsController : ControllerBase
     }
 
     [HttpPut("formulas/{code}")]
-    public Task<FormulaDefinitionDto> UpdateFormula(string code, [FromBody] FormulaUpdateRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<FormulaDefinitionDto>> UpdateFormula(string code, [FromBody] FormulaUpdateRequest request, CancellationToken cancellationToken)
     {
-        return _platformService.UpdateFormulaAsync(code, request, cancellationToken);
+        try
+        {
+            return await _platformService.UpdateFormulaAsync(code, request, cancellationToken);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return BadRequest(exception.Message);
+        }
     }
 }

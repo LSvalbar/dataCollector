@@ -25,4 +25,12 @@ public interface IEnterprisePlatformService
     Task<DeviceTimelineResponse> GetDeviceTimelineAsync(Guid deviceId, DateOnly reportDate, CancellationToken cancellationToken);
 
     Task<SecurityOverviewDto> GetSecurityOverviewAsync(CancellationToken cancellationToken);
+
+    Task<UserDto> SaveUserAsync(UserUpsertRequest request, CancellationToken cancellationToken);
+
+    Task DeleteUserAsync(string userCode, CancellationToken cancellationToken);
+
+    Task<RoleDto> SaveRoleAsync(RoleUpsertRequest request, CancellationToken cancellationToken);
+
+    Task DeleteRoleAsync(string roleCode, CancellationToken cancellationToken);
 }

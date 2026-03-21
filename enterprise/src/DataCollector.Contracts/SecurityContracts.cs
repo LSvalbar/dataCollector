@@ -45,3 +45,29 @@ public sealed class SecurityOverviewDto
 
     public required IReadOnlyList<PermissionDto> Permissions { get; set; }
 }
+
+public sealed class UserUpsertRequest
+{
+    public required string UserCode { get; set; }
+
+    public required string UserName { get; set; }
+
+    public required string DisplayName { get; set; }
+
+    public required string Department { get; set; }
+
+    public required IReadOnlyList<string> RoleCodes { get; set; }
+
+    public bool IsEnabled { get; set; }
+}
+
+public sealed class RoleUpsertRequest
+{
+    public required string RoleCode { get; set; }
+
+    public required string RoleName { get; set; }
+
+    public required string Description { get; set; }
+
+    public required IReadOnlyList<string> PermissionCodes { get; set; }
+}

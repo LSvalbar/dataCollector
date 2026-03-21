@@ -20,6 +20,10 @@ public partial class MainWindow : Window
     private bool _autoRefreshInProgress;
     private DeviceStatusWindow? _deviceStatusWindow;
     private OrganizationTreeNode? _treeContextNode;
+    private SecurityOverviewDto? _securityOverview;
+    private Guid? _deviceGridContextDeviceId;
+    private string? _userGridContextCode;
+    private string? _roleGridContextCode;
 
     public MainWindow()
     {
@@ -213,8 +217,10 @@ public partial class MainWindow : Window
                 return;
             }
 
+            _securityOverview = security;
             UsersGrid.ItemsSource = security.Users.Select(user => new UserGridRow
             {
+                UserCode = user.UserCode,
                 UserName = user.UserName,
                 DisplayName = user.DisplayName,
                 Department = user.Department,
@@ -505,16 +511,23 @@ public partial class MainWindow : Window
 
     private async Task SaveFormulaAsync(string code, string expression)
     {
-        await _apiClient.UpdateFormulaAsync(
-            code,
-            new FormulaUpdateRequest
-            {
-                Expression = expression.Trim(),
-                UpdatedBy = Environment.UserName,
-            });
+        try
+        {
+            await _apiClient.UpdateFormulaAsync(
+                code,
+                new FormulaUpdateRequest
+                {
+                    Expression = expression.Trim(),
+                    UpdatedBy = Environment.UserName,
+                });
 
-        await RefreshReportAsync(true);
-        MessageBox.Show(this, "公式已保存。", "保存成功", MessageBoxButton.OK, MessageBoxImage.Information);
+            await RefreshReportAsync(true);
+            MessageBox.Show(this, "公式已保存。", "保存成功", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "公式校验失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void UpdateServerStatus(bool online)
@@ -616,12 +629,13 @@ public partial class MainWindow : Window
             WorkshopName = string.Empty,
             DeviceCode = string.Empty,
             DeviceName = string.Empty,
-            Manufacturer = "FANUC",
+            Manufacturer = string.Empty,
             ControllerModel = "FANUC Series 0i-TF",
             ProtocolName = "FOCAS over Ethernet",
             IpAddress = string.Empty,
             Port = 8193,
             AgentNodeName = string.Empty,
+            ResponsiblePerson = string.Empty,
             IsEnabled = true,
         };
 
@@ -641,6 +655,7 @@ public partial class MainWindow : Window
                 request.WorkshopCode = device.WorkshopCode;
                 request.WorkshopName = device.WorkshopName;
                 request.AgentNodeName = device.AgentNodeName;
+                request.ResponsiblePerson = device.ResponsiblePerson;
             }
 
             return request;
@@ -656,6 +671,7 @@ public partial class MainWindow : Window
                 request.WorkshopCode = device.WorkshopCode;
                 request.WorkshopName = device.WorkshopName;
                 request.AgentNodeName = device.AgentNodeName;
+                request.ResponsiblePerson = device.ResponsiblePerson;
             }
 
             return request;
@@ -684,6 +700,104 @@ public partial class MainWindow : Window
         }
 
         return null;
+    }
+
+    private UserDto? GetSelectedUser()
+    {
+        if (_securityOverview is null)
+        {
+            return null;
+        }
+
+        if (UsersGrid.SelectedItem is UserGridRow row)
+        {
+            return _securityOverview.Users.FirstOrDefault(user => user.UserCode == row.UserCode);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_userGridContextCode))
+        {
+            return _securityOverview.Users.FirstOrDefault(user => user.UserCode == _userGridContextCode);
+        }
+
+        return null;
+    }
+
+    private RoleDto? GetSelectedRole()
+    {
+        if (_securityOverview is null)
+        {
+            return null;
+        }
+
+        if (RolesGrid.SelectedItem is RoleGridRow row)
+        {
+            return _securityOverview.Roles.FirstOrDefault(role => role.RoleCode == row.RoleCode);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_roleGridContextCode))
+        {
+            return _securityOverview.Roles.FirstOrDefault(role => role.RoleCode == _roleGridContextCode);
+        }
+
+        return null;
+    }
+
+    private async Task OpenUserEditorAsync(UserDto? user = null)
+    {
+        if (_securityOverview is null)
+        {
+            await RefreshSecurityAsync(true);
+        }
+
+        if (_securityOverview is null)
+        {
+            return;
+        }
+
+        var window = new UserEditorWindow(_securityOverview.Roles, user) { Owner = this };
+        if (window.ShowDialog() != true || window.Request is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _apiClient.SaveUserAsync(window.Request);
+            await RefreshSecurityAsync(true);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "用户保存失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task OpenRoleEditorAsync(RoleDto? role = null)
+    {
+        if (_securityOverview is null)
+        {
+            await RefreshSecurityAsync(true);
+        }
+
+        if (_securityOverview is null)
+        {
+            return;
+        }
+
+        var window = new RoleEditorWindow(_securityOverview.Permissions, role) { Owner = this };
+        if (window.ShowDialog() != true || window.Request is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _apiClient.SaveRoleAsync(window.Request);
+            await RefreshSecurityAsync(true);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "角色保存失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     private DeviceDto? GetSelectedDevice()
@@ -890,6 +1004,158 @@ public partial class MainWindow : Window
         }
     }
 
+    private void DevicesGrid_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var row = FindAncestor<DataGridRow>(e.OriginalSource as DependencyObject);
+        if (row?.Item is DeviceGridRow deviceRow)
+        {
+            row.IsSelected = true;
+            _deviceGridContextDeviceId = deviceRow.DeviceId;
+            return;
+        }
+
+        DevicesGrid.SelectedItem = null;
+        _deviceGridContextDeviceId = null;
+    }
+
+    private void DevicesGridContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        var hasSelection = _deviceGridContextDeviceId.HasValue || DevicesGrid.SelectedItem is DeviceGridRow;
+        EditDeviceMenuItem.IsEnabled = hasSelection;
+        DeleteDeviceMenuItem.IsEnabled = hasSelection;
+    }
+
+    private async void RefreshSecurityButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RefreshSecurityAsync(true);
+    }
+
+    private void UsersGrid_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var row = FindAncestor<DataGridRow>(e.OriginalSource as DependencyObject);
+        if (row?.Item is UserGridRow userRow)
+        {
+            row.IsSelected = true;
+            _userGridContextCode = userRow.UserCode;
+            return;
+        }
+
+        UsersGrid.SelectedItem = null;
+        _userGridContextCode = null;
+    }
+
+    private void UsersGridContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        var hasSelection = GetSelectedUser() is not null;
+        EditUserMenuItem.IsEnabled = hasSelection;
+        DeleteUserMenuItem.IsEnabled = hasSelection;
+    }
+
+    private async void AddUserMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        await OpenUserEditorAsync();
+    }
+
+    private async void EditUserMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var user = GetSelectedUser();
+        if (user is null)
+        {
+            MessageBox.Show(this, "请先选择要编辑的用户。", "未选择用户", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        await OpenUserEditorAsync(user);
+    }
+
+    private async void DeleteUserMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var user = GetSelectedUser();
+        if (user is null)
+        {
+            MessageBox.Show(this, "请先选择要删除的用户。", "未选择用户", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (MessageBox.Show(this, $"确定删除用户 {user.UserName} 吗？", "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            await _apiClient.DeleteUserAsync(user.UserCode);
+            await RefreshSecurityAsync(true);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "删除用户失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void RolesGrid_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var row = FindAncestor<DataGridRow>(e.OriginalSource as DependencyObject);
+        if (row?.Item is RoleGridRow roleRow)
+        {
+            row.IsSelected = true;
+            _roleGridContextCode = roleRow.RoleCode;
+            return;
+        }
+
+        RolesGrid.SelectedItem = null;
+        _roleGridContextCode = null;
+    }
+
+    private void RolesGridContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        var hasSelection = GetSelectedRole() is not null;
+        EditRoleMenuItem.IsEnabled = hasSelection;
+        DeleteRoleMenuItem.IsEnabled = hasSelection;
+    }
+
+    private async void AddRoleMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        await OpenRoleEditorAsync();
+    }
+
+    private async void EditRoleMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var role = GetSelectedRole();
+        if (role is null)
+        {
+            MessageBox.Show(this, "请先选择要编辑的角色。", "未选择角色", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        await OpenRoleEditorAsync(role);
+    }
+
+    private async void DeleteRoleMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var role = GetSelectedRole();
+        if (role is null)
+        {
+            MessageBox.Show(this, "请先选择要删除的角色。", "未选择角色", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        if (MessageBox.Show(this, $"确定删除角色 {role.RoleName} 吗？", "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            await _apiClient.DeleteRoleAsync(role.RoleCode);
+            await RefreshSecurityAsync(true);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "删除角色失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private async void RefreshTreeMenuItem_Click(object sender, RoutedEventArgs e)
     {
         await RefreshOverviewAsync(true);
@@ -1039,6 +1305,7 @@ public partial class MainWindow : Window
 
     private sealed class UserGridRow
     {
+        public required string UserCode { get; init; }
         public required string UserName { get; init; }
         public required string DisplayName { get; init; }
         public required string Department { get; init; }

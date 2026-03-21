@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
 using DataCollector.Contracts;
 
@@ -25,9 +28,8 @@ public partial class DeviceEditorWindow : Window
         WorkshopNameTextBox.Text = device?.WorkshopName ?? seedRequest?.WorkshopName ?? string.Empty;
         DeviceCodeTextBox.Text = device?.DeviceCode ?? seedRequest?.DeviceCode ?? string.Empty;
         DeviceNameTextBox.Text = device?.DeviceName ?? seedRequest?.DeviceName ?? string.Empty;
-        ManufacturerTextBox.Text = device?.Manufacturer ?? seedRequest?.Manufacturer ?? "FANUC";
-        ControllerModelTextBox.Text = device?.ControllerModel ?? seedRequest?.ControllerModel ?? "FANUC Series 0i-TF";
-        ProtocolTextBox.Text = device?.ProtocolName ?? seedRequest?.ProtocolName ?? "FOCAS over Ethernet";
+        SystemVersionTextBox.Text = device?.ControllerModel ?? seedRequest?.ControllerModel ?? "FANUC Series 0i-TF";
+        ResponsiblePersonTextBox.Text = device?.ResponsiblePerson ?? seedRequest?.ResponsiblePerson ?? string.Empty;
         IpTextBox.Text = device?.IpAddress ?? seedRequest?.IpAddress ?? string.Empty;
         PortTextBox.Text = device?.Port.ToString() ?? seedRequest?.Port.ToString() ?? "8193";
         AgentNodeTextBox.Text = device?.AgentNodeName ?? seedRequest?.AgentNodeName ?? string.Empty;
@@ -46,44 +48,70 @@ public partial class DeviceEditorWindow : Window
             return;
         }
 
-        Request = new DeviceUpsertRequest
-        {
-            DeviceId = DeviceId,
-            DepartmentCode = DepartmentCodeTextBox.Text.Trim(),
-            DepartmentName = DepartmentNameTextBox.Text.Trim(),
-            WorkshopCode = WorkshopCodeTextBox.Text.Trim(),
-            WorkshopName = WorkshopNameTextBox.Text.Trim(),
-            DeviceCode = DeviceCodeTextBox.Text.Trim(),
-            DeviceName = DeviceNameTextBox.Text.Trim(),
-            Manufacturer = ManufacturerTextBox.Text.Trim(),
-            ControllerModel = ControllerModelTextBox.Text.Trim(),
-            ProtocolName = ProtocolTextBox.Text.Trim(),
-            IpAddress = IpTextBox.Text.Trim(),
-            Port = port,
-            AgentNodeName = AgentNodeTextBox.Text.Trim(),
-            IsEnabled = EnabledCheckBox.IsChecked ?? true,
-        };
+        var departmentName = DepartmentNameTextBox.Text.Trim();
+        var workshopName = WorkshopNameTextBox.Text.Trim();
+        var deviceCode = DeviceCodeTextBox.Text.Trim();
+        var deviceName = DeviceNameTextBox.Text.Trim();
+        var ipAddress = IpTextBox.Text.Trim();
+        var agentNodeName = AgentNodeTextBox.Text.Trim();
 
-        if (string.IsNullOrWhiteSpace(Request.DepartmentCode) ||
-            string.IsNullOrWhiteSpace(Request.DepartmentName) ||
-            string.IsNullOrWhiteSpace(Request.WorkshopCode) ||
-            string.IsNullOrWhiteSpace(Request.WorkshopName) ||
-            string.IsNullOrWhiteSpace(Request.DeviceCode) ||
-            string.IsNullOrWhiteSpace(Request.DeviceName) ||
-            string.IsNullOrWhiteSpace(Request.IpAddress) ||
-            string.IsNullOrWhiteSpace(Request.AgentNodeName))
+        if (string.IsNullOrWhiteSpace(departmentName) ||
+            string.IsNullOrWhiteSpace(workshopName) ||
+            string.IsNullOrWhiteSpace(deviceCode) ||
+            string.IsNullOrWhiteSpace(deviceName) ||
+            string.IsNullOrWhiteSpace(ipAddress) ||
+            string.IsNullOrWhiteSpace(agentNodeName))
         {
             MessageBox.Show(
                 this,
-                "部门、车间、设备编码、设备名称、IP 地址和 Agent 节点不能为空。",
+                "部门名称、车间名称、设备编码、设备名称、IP 地址和 Agent 节点不能为空。",
                 "校验失败",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
         }
 
+        var departmentCode = string.IsNullOrWhiteSpace(DepartmentCodeTextBox.Text)
+            ? BuildCode(departmentName, "D")
+            : DepartmentCodeTextBox.Text.Trim();
+        var workshopCode = string.IsNullOrWhiteSpace(WorkshopCodeTextBox.Text)
+            ? BuildCode($"{departmentName}-{workshopName}", "W")
+            : WorkshopCodeTextBox.Text.Trim();
+
+        Request = new DeviceUpsertRequest
+        {
+            DeviceId = DeviceId,
+            DepartmentCode = departmentCode,
+            DepartmentName = departmentName,
+            WorkshopCode = workshopCode,
+            WorkshopName = workshopName,
+            DeviceCode = deviceCode,
+            DeviceName = deviceName,
+            Manufacturer = string.Empty,
+            ControllerModel = SystemVersionTextBox.Text.Trim(),
+            ProtocolName = "FOCAS over Ethernet",
+            IpAddress = ipAddress,
+            Port = port,
+            AgentNodeName = agentNodeName,
+            ResponsiblePerson = ResponsiblePersonTextBox.Text.Trim(),
+            IsEnabled = EnabledCheckBox.IsChecked ?? true,
+        };
+
         DialogResult = true;
         Close();
+    }
+
+    private static string BuildCode(string source, string prefix)
+    {
+        var normalized = Regex.Replace(source.ToUpperInvariant(), "[^A-Z0-9]+", string.Empty);
+        if (!string.IsNullOrWhiteSpace(normalized))
+        {
+            return $"{prefix}{normalized}";
+        }
+
+        var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(source));
+        var hash = Convert.ToHexString(hashBytes)[..8];
+        return $"{prefix}{hash}";
     }
 
     private void CancelButton_Click(object sender, RoutedEventArgs e)

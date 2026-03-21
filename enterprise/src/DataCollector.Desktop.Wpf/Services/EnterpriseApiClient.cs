@@ -67,6 +67,32 @@ public sealed class EnterpriseApiClient : IDisposable
         return _httpClient.GetFromJsonAsync<SecurityOverviewDto>("/api/security/overview", cancellationToken);
     }
 
+    public async Task<UserDto?> SaveUserAsync(UserUpsertRequest request, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync("/api/security/users", request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<UserDto>(cancellationToken);
+    }
+
+    public async Task DeleteUserAsync(string userCode, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.DeleteAsync($"/api/security/users/{userCode}", cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    public async Task<RoleDto?> SaveRoleAsync(RoleUpsertRequest request, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync("/api/security/roles", request, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<RoleDto>(cancellationToken);
+    }
+
+    public async Task DeleteRoleAsync(string roleCode, CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.DeleteAsync($"/api/security/roles/{roleCode}", cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
     public async Task<DeviceDto?> CreateDeviceAsync(DeviceUpsertRequest request, CancellationToken cancellationToken = default)
     {
         using var response = await _httpClient.PostAsJsonAsync("/api/device-management/devices", request, cancellationToken);

@@ -15,7 +15,9 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
     private readonly TimeProvider _timeProvider;
     private readonly List<DeviceDto> _devices;
     private readonly Dictionary<string, FormulaDefinitionDto> _formulas;
-    private readonly SecurityOverviewDto _securityOverview;
+    private readonly List<UserDto> _users;
+    private readonly List<RoleDto> _roles;
+    private readonly IReadOnlyList<PermissionDto> _permissions;
 
     public InMemoryEnterprisePlatformService(
         FormulaEngine formulaEngine,
@@ -29,7 +31,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
         _timeProvider = timeProvider;
         _devices = [];
         _formulas = BuildDefaultFormulas();
-        _securityOverview = BuildSecurityOverview();
+        (_users, _roles, _permissions) = BuildSecuritySeed();
     }
 
     public Task<DeviceManagementOverviewDto> GetDeviceManagementOverviewAsync(CancellationToken cancellationToken)
@@ -98,6 +100,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                     IpAddress = request.IpAddress.Trim(),
                     Port = request.Port,
                     AgentNodeName = request.AgentNodeName.Trim(),
+                    ResponsiblePerson = request.ResponsiblePerson?.Trim(),
                     CurrentState = request.IsEnabled ? MachineOperationalState.CommunicationInterrupted : MachineOperationalState.PowerOff,
                     HealthLevel = request.IsEnabled ? DeviceHealthLevel.Warning : DeviceHealthLevel.Normal,
                     IsEnabled = request.IsEnabled,
@@ -121,6 +124,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                 existing.IpAddress = request.IpAddress.Trim();
                 existing.Port = request.Port;
                 existing.AgentNodeName = request.AgentNodeName.Trim();
+                existing.ResponsiblePerson = request.ResponsiblePerson?.Trim();
                 existing.IsEnabled = request.IsEnabled;
                 existing.CurrentState = request.IsEnabled ? existing.CurrentState : MachineOperationalState.PowerOff;
                 existing.MachineOnline = request.IsEnabled && existing.MachineOnline;
@@ -293,7 +297,17 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                 throw new KeyNotFoundException($"未找到公式 {normalizedCode}。");
             }
 
-            existing.Expression = request.Expression.Trim();
+            var expression = request.Expression.Trim();
+            try
+            {
+                _formulaEngine.Evaluate(expression, _formulaEngine.BuildVariableMap(new DailyMetricsSnapshot()));
+            }
+            catch (Exception)
+            {
+                throw new InvalidOperationException("公式输入有误，请查看列名是否相同。");
+            }
+
+            existing.Expression = expression;
             existing.UpdatedBy = request.UpdatedBy.Trim();
             existing.UpdatedAt = _timeProvider.GetLocalNow();
             return Task.FromResult(CloneFormula(existing));
@@ -338,7 +352,172 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
     public Task<SecurityOverviewDto> GetSecurityOverviewAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(_securityOverview);
+        lock (_gate)
+        {
+            return Task.FromResult(new SecurityOverviewDto
+            {
+                Users = _users.Select(CloneUser).ToArray(),
+                Roles = _roles.Select(CloneRole).ToArray(),
+                Permissions = _permissions.Select(ClonePermission).ToArray(),
+            });
+        }
+    }
+
+    public Task<UserDto> SaveUserAsync(UserUpsertRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(request.UserCode) ||
+            string.IsNullOrWhiteSpace(request.UserName) ||
+            string.IsNullOrWhiteSpace(request.DisplayName) ||
+            string.IsNullOrWhiteSpace(request.Department))
+        {
+            throw new InvalidOperationException("用户编码、用户名、显示名和所属部门不能为空。");
+        }
+
+        var normalizedRoleCodes = request.RoleCodes
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Select(code => code.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (normalizedRoleCodes.Length == 0)
+        {
+            throw new InvalidOperationException("用户至少需要绑定一个角色。");
+        }
+
+        lock (_gate)
+        {
+            var missingRoleCode = normalizedRoleCodes.FirstOrDefault(code => _roles.All(role => !role.RoleCode.Equals(code, StringComparison.OrdinalIgnoreCase)));
+            if (missingRoleCode is not null)
+            {
+                throw new InvalidOperationException($"角色 {missingRoleCode} 不存在，无法保存用户。");
+            }
+
+            var existing = _users.FirstOrDefault(user => user.UserCode.Equals(request.UserCode, StringComparison.OrdinalIgnoreCase));
+            if (existing is null)
+            {
+                existing = new UserDto
+                {
+                    UserCode = request.UserCode.Trim(),
+                    UserName = request.UserName.Trim(),
+                    DisplayName = request.DisplayName.Trim(),
+                    Department = request.Department.Trim(),
+                    RoleCodes = normalizedRoleCodes,
+                    IsEnabled = request.IsEnabled,
+                    LastLoginAt = DateTimeOffset.MinValue,
+                };
+                _users.Add(existing);
+            }
+            else
+            {
+                existing.UserName = request.UserName.Trim();
+                existing.DisplayName = request.DisplayName.Trim();
+                existing.Department = request.Department.Trim();
+                existing.RoleCodes = normalizedRoleCodes;
+                existing.IsEnabled = request.IsEnabled;
+            }
+
+            return Task.FromResult(CloneUser(existing));
+        }
+    }
+
+    public Task DeleteUserAsync(string userCode, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(userCode);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        lock (_gate)
+        {
+            var existing = _users.FirstOrDefault(user => user.UserCode.Equals(userCode, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+            {
+                _users.Remove(existing);
+            }
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<RoleDto> SaveRoleAsync(RoleUpsertRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(request.RoleCode) ||
+            string.IsNullOrWhiteSpace(request.RoleName))
+        {
+            throw new InvalidOperationException("角色编码和角色名称不能为空。");
+        }
+
+        var normalizedPermissionCodes = request.PermissionCodes
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Select(code => code.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (normalizedPermissionCodes.Length == 0)
+        {
+            throw new InvalidOperationException("角色至少需要包含一个权限。");
+        }
+
+        lock (_gate)
+        {
+            var missingPermission = normalizedPermissionCodes.FirstOrDefault(code => _permissions.All(permission => !permission.PermissionCode.Equals(code, StringComparison.OrdinalIgnoreCase)));
+            if (missingPermission is not null)
+            {
+                throw new InvalidOperationException($"权限 {missingPermission} 不存在，无法保存角色。");
+            }
+
+            var permissions = _permissions
+                .Where(permission => normalizedPermissionCodes.Contains(permission.PermissionCode, StringComparer.OrdinalIgnoreCase))
+                .Select(ClonePermission)
+                .ToArray();
+
+            var existing = _roles.FirstOrDefault(role => role.RoleCode.Equals(request.RoleCode, StringComparison.OrdinalIgnoreCase));
+            if (existing is null)
+            {
+                existing = new RoleDto
+                {
+                    RoleCode = request.RoleCode.Trim(),
+                    RoleName = request.RoleName.Trim(),
+                    Description = request.Description.Trim(),
+                    Permissions = permissions,
+                };
+                _roles.Add(existing);
+            }
+            else
+            {
+                existing.RoleName = request.RoleName.Trim();
+                existing.Description = request.Description.Trim();
+                existing.Permissions = permissions;
+            }
+
+            return Task.FromResult(CloneRole(existing));
+        }
+    }
+
+    public Task DeleteRoleAsync(string roleCode, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(roleCode);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        lock (_gate)
+        {
+            if (_users.Any(user => user.RoleCodes.Contains(roleCode, StringComparer.OrdinalIgnoreCase)))
+            {
+                throw new InvalidOperationException($"角色 {roleCode} 仍被用户引用，不能删除。");
+            }
+
+            var existing = _roles.FirstOrDefault(role => role.RoleCode.Equals(roleCode, StringComparison.OrdinalIgnoreCase));
+            if (existing is not null)
+            {
+                _roles.Remove(existing);
+            }
+        }
+
+        return Task.CompletedTask;
     }
 
     private List<DeviceDto> BuildDeviceSnapshots(DateTimeOffset now)
@@ -533,7 +712,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                 Code = "power_on_rate",
                 DisplayName = "开机率",
                 Description = "默认按当天已观测时长计算开机率。",
-                Expression = "(power_on_minutes / observed_minutes) * 100",
+                Expression = "(开机时间 / 已观测时间) * 100",
                 ResultUnit = "%",
                 UpdatedAt = now,
                 UpdatedBy = "system",
@@ -543,7 +722,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                 Code = "utilization_rate",
                 DisplayName = "利用率",
                 Description = "默认按开机时间中的加工占比计算利用率。",
-                Expression = "(processing_minutes / power_on_minutes) * 100",
+                Expression = "(加工时间 / 开机时间) * 100",
                 ResultUnit = "%",
                 UpdatedAt = now,
                 UpdatedBy = "system",
@@ -551,7 +730,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
         };
     }
 
-    private static SecurityOverviewDto BuildSecurityOverview()
+    private static (List<UserDto> Users, List<RoleDto> Roles, IReadOnlyList<PermissionDto> Permissions) BuildSecuritySeed()
     {
         var permissions = new[]
         {
@@ -601,12 +780,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
             },
         };
 
-        return new SecurityOverviewDto
-        {
-            Users = users,
-            Roles = roles,
-            Permissions = permissions,
-        };
+        return (users.ToList(), roles.ToList(), permissions);
     }
 
     private static DeviceDto CloneDevice(DeviceDto source)
@@ -626,6 +800,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
             IpAddress = source.IpAddress,
             Port = source.Port,
             AgentNodeName = source.AgentNodeName,
+            ResponsiblePerson = source.ResponsiblePerson,
             CurrentState = source.CurrentState,
             HealthLevel = source.HealthLevel,
             IsEnabled = source.IsEnabled,
@@ -662,6 +837,41 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
             ResultUnit = source.ResultUnit,
             UpdatedAt = source.UpdatedAt,
             UpdatedBy = source.UpdatedBy,
+        };
+    }
+
+    private static UserDto CloneUser(UserDto source)
+    {
+        return new UserDto
+        {
+            UserCode = source.UserCode,
+            UserName = source.UserName,
+            DisplayName = source.DisplayName,
+            Department = source.Department,
+            RoleCodes = source.RoleCodes.ToArray(),
+            IsEnabled = source.IsEnabled,
+            LastLoginAt = source.LastLoginAt,
+        };
+    }
+
+    private static RoleDto CloneRole(RoleDto source)
+    {
+        return new RoleDto
+        {
+            RoleCode = source.RoleCode,
+            RoleName = source.RoleName,
+            Description = source.Description,
+            Permissions = source.Permissions.Select(ClonePermission).ToArray(),
+        };
+    }
+
+    private static PermissionDto ClonePermission(PermissionDto source)
+    {
+        return new PermissionDto
+        {
+            PermissionCode = source.PermissionCode,
+            PermissionName = source.PermissionName,
+            Description = source.Description,
         };
     }
 }

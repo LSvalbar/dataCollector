@@ -51,6 +51,8 @@ public sealed class DeviceDto
 
     public required string AgentNodeName { get; set; }
 
+    public string? ResponsiblePerson { get; set; }
+
     public MachineOperationalState CurrentState { get; set; }
 
     public DeviceHealthLevel HealthLevel { get; set; }
@@ -123,6 +125,8 @@ public sealed class DeviceUpsertRequest
     public int Port { get; set; }
 
     public required string AgentNodeName { get; set; }
+
+    public string? ResponsiblePerson { get; set; }
 
     public bool IsEnabled { get; set; }
 }

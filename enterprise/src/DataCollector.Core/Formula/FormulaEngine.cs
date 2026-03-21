@@ -62,16 +62,16 @@ public sealed class FormulaEngine
     {
         return new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
         {
-            ["power_on_minutes"] = metrics.PowerOnMinutes,
-            ["processing_minutes"] = metrics.ProcessingMinutes,
-            ["waiting_minutes"] = metrics.WaitingMinutes,
-            ["standby_minutes"] = metrics.StandbyMinutes,
-            ["power_off_minutes"] = metrics.PowerOffMinutes,
-            ["alarm_minutes"] = metrics.AlarmMinutes,
-            ["emergency_minutes"] = metrics.EmergencyMinutes,
-            ["communication_interrupted_minutes"] = metrics.CommunicationInterruptedMinutes,
-            ["observed_minutes"] = metrics.ObservedMinutes,
-            ["calendar_day_minutes"] = 1440d,
+            ["开机时间"] = metrics.PowerOnMinutes,
+            ["加工时间"] = metrics.ProcessingMinutes,
+            ["等待时间"] = metrics.WaitingMinutes,
+            ["待机时间"] = metrics.StandbyMinutes,
+            ["关机时间"] = metrics.PowerOffMinutes,
+            ["报警时间"] = metrics.AlarmMinutes,
+            ["急停时间"] = metrics.EmergencyMinutes,
+            ["通信中断时间"] = metrics.CommunicationInterruptedMinutes,
+            ["已观测时间"] = metrics.ObservedMinutes,
+            ["日历天时间"] = 1440d,
         };
     }
 

@@ -5,7 +5,7 @@
         xmlns:local="clr-namespace:DataCollector.Desktop.Wpf"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="DataCollector Enterprise"
+        Title="机加数采客户端"
         Width="1620"
         Height="940"
         MinWidth="1360"
@@ -32,40 +32,32 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Border Margin="20,18,20,0" Padding="24,18" Style="{StaticResource CardBorderStyle}">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel>
-                    <TextBlock FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="企业级 CNC 采集平台" />
-                    <TextBlock Margin="0,8,0,0"
-                               Foreground="{StaticResource TextSecondaryBrush}"
-                               Text="设备管理、实时状态、日报统计、时间追溯与权限治理统一在一个客户端完成。" />
+        <Grid Margin="20,18,20,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock FontSize="24" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="机加数采客户端" />
+            <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                <TextBlock x:Name="ServerStatusTextBlock"
+                           HorizontalAlignment="Right"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           Text="服务状态：检测中" />
+                <TextBlock x:Name="ApiBaseUrlTextBlock"
+                           Margin="0,6,0,0"
+                           HorizontalAlignment="Right"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           Text="API：" />
+                <TextBlock x:Name="LastOverviewRefreshTextBlock"
+                           Margin="0,6,0,0"
+                           HorizontalAlignment="Right"
+                           Foreground="{StaticResource TextSecondaryBrush}"
+                           Text="最近刷新：-" />
+                <StackPanel Margin="0,14,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Width="120" Style="{StaticResource SecondaryButtonStyle}" Content="刷新全部" Click="RefreshAllButton_Click" />
                 </StackPanel>
-                <StackPanel Grid.Column="1" HorizontalAlignment="Right">
-                    <TextBlock x:Name="ServerStatusTextBlock"
-                               HorizontalAlignment="Right"
-                               Foreground="{StaticResource TextPrimaryBrush}"
-                               Text="服务状态：检测中" />
-                    <TextBlock x:Name="ApiBaseUrlTextBlock"
-                               Margin="0,6,0,0"
-                               HorizontalAlignment="Right"
-                               Foreground="{StaticResource TextSecondaryBrush}"
-                               Text="API：" />
-                    <TextBlock x:Name="LastOverviewRefreshTextBlock"
-                               Margin="0,6,0,0"
-                               HorizontalAlignment="Right"
-                               Foreground="{StaticResource TextSecondaryBrush}"
-                               Text="最近刷新：-" />
-                    <StackPanel Margin="0,14,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Width="120" Margin="0,0,10,0" Style="{StaticResource SecondaryButtonStyle}" Content="刷新全部" Click="RefreshAllButton_Click" />
-                        <Button Width="120" Style="{StaticResource PrimaryButtonStyle}" Content="打开设备详情" Click="OpenSelectedDeviceButton_Click" />
-                    </StackPanel>
-                </StackPanel>
-            </Grid>
-        </Border>
+            </StackPanel>
+        </Grid>
 
         <TabControl x:Name="MainTabControl" Grid.Row="1" Margin="20,18,20,20">
             <TabItem x:Name="DeviceManagementTab" Header="设备管理">
@@ -82,12 +74,7 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
-                            <StackPanel>
-                                <TextBlock FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="组织视图" />
-                                <TextBlock Margin="0,6,0,0"
-                                           Foreground="{StaticResource TextSecondaryBrush}"
-                                           Text="按部门、车间、机床逐级查看。点击 + 号展开，双击机床打开详情。" />
-                            </StackPanel>
+                            <TextBlock FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="组织视图" />
                             <TreeView x:Name="DeviceTreeView"
                                       Grid.Row="1"
                                       Margin="0,18,0,0"
@@ -96,7 +83,7 @@
                                       SelectedItemChanged="DeviceTreeView_SelectedItemChanged">
                                 <TreeView.ContextMenu>
                                     <ContextMenu x:Name="DeviceTreeContextMenu" Opened="DeviceTreeContextMenu_Opened">
-                                        <MenuItem x:Name="RefreshTreeMenuItem" Header="&#x5237;&#x65B0;&#x6811;&#x83DC;&#x5355;" Click="RefreshTreeMenuItem_Click" />
+                                        <MenuItem x:Name="RefreshTreeMenuItem" Header="&#x5237;&#x65B0;" Click="RefreshTreeMenuItem_Click" />
                                         <MenuItem x:Name="AddDeviceFromTreeMenuItem" Header="&#x6DFB;&#x52A0;&#x8BBE;&#x5907;" Click="AddDeviceFromTreeMenuItem_Click" />
                                         <Separator />
                                         <MenuItem x:Name="RenameTreeNodeMenuItem" Header="&#x91CD;&#x547D;&#x540D;" Click="RenameTreeNodeMenuItem_Click" />
@@ -139,13 +126,23 @@
                         <WrapPanel x:Name="ScopeCardsPanel" Grid.Row="1" Margin="0,18,0,10" />
 
                         <Border Grid.Row="2" Style="{StaticResource CardBorderStyle}">
-                            <DataGrid x:Name="DevicesGrid" MouseDoubleClick="DevicesGrid_MouseDoubleClick">
+                            <DataGrid x:Name="DevicesGrid"
+                                      MouseDoubleClick="DevicesGrid_MouseDoubleClick"
+                                      PreviewMouseRightButtonDown="DevicesGrid_PreviewMouseRightButtonDown">
+                                <DataGrid.ContextMenu>
+                                    <ContextMenu x:Name="DevicesGridContextMenu" Opened="DevicesGridContextMenu_Opened">
+                                        <MenuItem x:Name="RefreshDevicesMenuItem" Header="刷新列表" Click="RefreshOverviewButton_Click" />
+                                        <Separator />
+                                        <MenuItem x:Name="EditDeviceMenuItem" Header="编辑设备" Click="EditDeviceButton_Click" />
+                                        <MenuItem x:Name="DeleteDeviceMenuItem" Header="删除设备" Click="DeleteDeviceButton_Click" />
+                                    </ContextMenu>
+                                </DataGrid.ContextMenu>
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="部门" Binding="{Binding DepartmentName}" Width="110" />
                                     <DataGridTextColumn Header="车间" Binding="{Binding WorkshopName}" Width="100" />
                                     <DataGridTextColumn Header="设备编码" Binding="{Binding DeviceCode}" Width="128" />
                                     <DataGridTextColumn Header="设备名称" Binding="{Binding DeviceName}" Width="150" />
-                                    <DataGridTextColumn Header="控制器" Binding="{Binding ControllerModel}" Width="180" />
+                                    <DataGridTextColumn Header="系统版本" Binding="{Binding ControllerModel}" Width="180" />
                                     <DataGridTextColumn Header="IP" Binding="{Binding IpAddress}" Width="120" />
                                     <DataGridTemplateColumn Header="在线" Width="84">
                                         <DataGridTemplateColumn.CellTemplate>
@@ -223,6 +220,7 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <TextBox x:Name="PowerOnFormulaTextBox" Height="64" TextWrapping="Wrap" AcceptsReturn="True" />
                                 <Button Grid.Row="1"
@@ -232,12 +230,17 @@
                                         Style="{StaticResource PrimaryButtonStyle}"
                                         Content="保存开机率公式"
                                         Click="SavePowerOnFormulaButton_Click" />
+                                <TextBlock Grid.Row="2"
+                                           Margin="0,12,0,0"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           Text="可用列名：开机时间、加工时间、等待时间、待机时间、关机时间、报警时间、急停时间、通信中断时间、已观测时间、日历天时间" />
                             </Grid>
                         </GroupBox>
 
                         <GroupBox Grid.Column="2" Header="利用率公式">
                             <Grid>
                                 <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
@@ -249,6 +252,10 @@
                                         Style="{StaticResource PrimaryButtonStyle}"
                                         Content="保存利用率公式"
                                         Click="SaveUtilizationFormulaButton_Click" />
+                                <TextBlock Grid.Row="2"
+                                           Margin="0,12,0,0"
+                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                           Text="输入示例：(加工时间 / 开机时间) * 100" />
                             </Grid>
                         </GroupBox>
                     </Grid>
@@ -344,7 +351,17 @@
                         </Grid.ColumnDefinitions>
 
                         <GroupBox Header="用户">
-                            <DataGrid x:Name="UsersGrid">
+                            <DataGrid x:Name="UsersGrid"
+                                      PreviewMouseRightButtonDown="UsersGrid_PreviewMouseRightButtonDown">
+                                <DataGrid.ContextMenu>
+                                    <ContextMenu x:Name="UsersGridContextMenu" Opened="UsersGridContextMenu_Opened">
+                                        <MenuItem x:Name="RefreshUsersMenuItem" Header="刷新" Click="RefreshSecurityButton_Click" />
+                                        <MenuItem x:Name="AddUserMenuItem" Header="添加用户" Click="AddUserMenuItem_Click" />
+                                        <Separator />
+                                        <MenuItem x:Name="EditUserMenuItem" Header="编辑用户" Click="EditUserMenuItem_Click" />
+                                        <MenuItem x:Name="DeleteUserMenuItem" Header="删除用户" Click="DeleteUserMenuItem_Click" />
+                                    </ContextMenu>
+                                </DataGrid.ContextMenu>
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="用户名" Binding="{Binding UserName}" Width="120" />
                                     <DataGridTextColumn Header="显示名" Binding="{Binding DisplayName}" Width="110" />
@@ -357,7 +374,17 @@
                         </GroupBox>
 
                         <GroupBox Grid.Column="2" Header="角色">
-                            <DataGrid x:Name="RolesGrid">
+                            <DataGrid x:Name="RolesGrid"
+                                      PreviewMouseRightButtonDown="RolesGrid_PreviewMouseRightButtonDown">
+                                <DataGrid.ContextMenu>
+                                    <ContextMenu x:Name="RolesGridContextMenu" Opened="RolesGridContextMenu_Opened">
+                                        <MenuItem x:Name="RefreshRolesMenuItem" Header="刷新" Click="RefreshSecurityButton_Click" />
+                                        <MenuItem x:Name="AddRoleMenuItem" Header="添加角色" Click="AddRoleMenuItem_Click" />
+                                        <Separator />
+                                        <MenuItem x:Name="EditRoleMenuItem" Header="编辑角色" Click="EditRoleMenuItem_Click" />
+                                        <MenuItem x:Name="DeleteRoleMenuItem" Header="删除角色" Click="DeleteRoleMenuItem_Click" />
+                                    </ContextMenu>
+                                </DataGrid.ContextMenu>
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="角色编码" Binding="{Binding RoleCode}" Width="100" />
                                     <DataGridTextColumn Header="角色名称" Binding="{Binding RoleName}" Width="100" />
