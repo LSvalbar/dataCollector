@@ -122,6 +122,10 @@ public sealed class TimelineSegmentDto
     public int? AlarmNumber { get; set; }
 
     public string? AlarmMessage { get; set; }
+
+    public string? ProgramNo { get; set; }
+
+    public string? DrawingNumber { get; set; }
 }
 
 public sealed class DeviceTimelineResponse

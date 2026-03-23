@@ -69,6 +69,8 @@ public sealed class DeviceDto
 
     public string? CurrentProgramName { get; set; }
 
+    public string? CurrentDrawingNumber { get; set; }
+
     public int? SpindleSpeedRpm { get; set; }
 
     public double? SpindleLoadPercent { get; set; }

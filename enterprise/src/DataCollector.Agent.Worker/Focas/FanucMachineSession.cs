@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using DataCollector.Contracts;
 
 namespace DataCollector.Agent.Worker.Focas;
@@ -8,6 +9,7 @@ internal sealed class FanucMachineSession : IDisposable
     private readonly MachineEndpointOptions _machine;
     private readonly ILogger _logger;
     private readonly TimeSpan _transientFailureTolerance;
+    private readonly Dictionary<int, string?> _drawingNumberCache = new();
     private ushort _handle;
     private bool _connected;
     private MachineRealtimeSnapshotDto? _lastSuccessfulSnapshot;
@@ -96,6 +98,7 @@ internal sealed class FanucMachineSession : IDisposable
             SpindleLoadPercent = spindleMetrics.SpindleLoadPercent,
             CurrentProgramNo = program.ProgramNo,
             CurrentProgramName = program.ProgramName,
+            CurrentDrawingNumber = program.DrawingNumber,
             NativePowerOnTotalMs = timers.PowerOnTotalMs,
             NativeOperatingTotalMs = timers.OperatingTotalMs,
             NativeCuttingTotalMs = timers.CuttingTotalMs,
@@ -233,16 +236,54 @@ internal sealed class FanucMachineSession : IDisposable
             spindleLoad);
     }
 
-    private (string? ProgramNo, string? ProgramName) ReadCurrentProgram()
+    private ProgramMetadata ReadCurrentProgram()
     {
         var result = FanucNative.cnc_exeprgname(_handle, out var buffer);
         if (result != FanucNative.EwOk)
         {
-            return (null, null);
+            return ProgramMetadata.Empty;
         }
 
         var programName = DecodeAscii(buffer.Name);
-        return (buffer.ONumber == 0 ? null : $"O{buffer.ONumber:0000}", string.IsNullOrWhiteSpace(programName) ? null : programName);
+        if (buffer.ONumber == 0)
+        {
+            return new ProgramMetadata(null, null, string.IsNullOrWhiteSpace(programName) ? null : programName, null);
+        }
+
+        return new ProgramMetadata(
+            buffer.ONumber,
+            $"O{buffer.ONumber:0000}",
+            string.IsNullOrWhiteSpace(programName) ? null : programName,
+            ReadDrawingNumber(buffer.ONumber));
+    }
+
+    private string? ReadDrawingNumber(int programNumber)
+    {
+        if (_drawingNumberCache.TryGetValue(programNumber, out var cachedDrawingNumber))
+        {
+            return cachedDrawingNumber;
+        }
+
+        long topProgramNumber = programNumber;
+        short readCount = 1;
+        var buffer = new FanucNative.PrgDir3[1];
+        var result = FanucNative.cnc_rdprogdir3(_handle, 1, ref topProgramNumber, ref readCount, buffer);
+        if (result != FanucNative.EwOk || readCount <= 0)
+        {
+            _drawingNumberCache[programNumber] = null;
+            return null;
+        }
+
+        var entry = buffer[0];
+        if (entry.Number != programNumber)
+        {
+            _drawingNumberCache[programNumber] = null;
+            return null;
+        }
+
+        var drawingNumber = ExtractDrawingNumber(DecodeAscii(entry.Comment));
+        _drawingNumberCache[programNumber] = drawingNumber;
+        return drawingNumber;
     }
 
     private (long? PowerOnTotalMs, long? OperatingTotalMs, long? CuttingTotalMs, long? FreeTotalMs) ReadTimers()
@@ -396,6 +437,7 @@ internal sealed class FanucMachineSession : IDisposable
             SpindleLoadPercent = source.SpindleLoadPercent,
             CurrentProgramNo = source.CurrentProgramNo,
             CurrentProgramName = source.CurrentProgramName,
+            CurrentDrawingNumber = source.CurrentDrawingNumber,
             NativePowerOnTotalMs = source.NativePowerOnTotalMs,
             NativeOperatingTotalMs = source.NativeOperatingTotalMs,
             NativeCuttingTotalMs = source.NativeCuttingTotalMs,
@@ -416,5 +458,33 @@ internal sealed class FanucMachineSession : IDisposable
         return Encoding.ASCII.GetString(raw).Replace("\0", string.Empty).Trim();
     }
 
+    private static string? ExtractDrawingNumber(string? programComment)
+    {
+        if (string.IsNullOrWhiteSpace(programComment))
+        {
+            return null;
+        }
+
+        var normalized = programComment.Trim();
+        if (normalized == "()")
+        {
+            return null;
+        }
+
+        var match = Regex.Match(normalized, @"\((?<drawing>[^)]{1,200})\)", RegexOptions.CultureInvariant);
+        if (match.Success)
+        {
+            var drawingNumber = match.Groups["drawing"].Value.Trim();
+            return string.IsNullOrWhiteSpace(drawingNumber) ? null : drawingNumber;
+        }
+
+        return normalized;
+    }
+
     private sealed record SpindleMetrics(int? SpindleSpeedRpm, double? SpindleLoadPercent);
+
+    private sealed record ProgramMetadata(int? ProgramNumber, string? ProgramNo, string? ProgramName, string? DrawingNumber)
+    {
+        public static ProgramMetadata Empty { get; } = new(null, null, null, null);
+    }
 }

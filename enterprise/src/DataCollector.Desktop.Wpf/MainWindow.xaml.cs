@@ -223,6 +223,8 @@ public partial class MainWindow : Window
                 StateText = segment.State.ToDisplayName(),
                 StartAtText = segment.StartAt.ToString("yyyy-MM-dd HH:mm:ss"),
                 EndAtText = segment.EndAt.ToString("yyyy-MM-dd HH:mm:ss"),
+                ProgramNoText = string.IsNullOrWhiteSpace(segment.ProgramNo) ? "-" : segment.ProgramNo,
+                DrawingNumberText = string.IsNullOrWhiteSpace(segment.DrawingNumber) ? "-" : segment.DrawingNumber,
                 DurationSecondsText = $"{Math.Max(0, segment.DurationSeconds)} 秒",
                 AlarmNumberText = segment.AlarmNumber?.ToString() ?? "-",
                 AlarmMessage = string.IsNullOrWhiteSpace(segment.AlarmMessage) ? "-" : segment.AlarmMessage,
@@ -1025,6 +1027,7 @@ public partial class MainWindow : Window
                 _ => CreateBrush("#605E5C"),
             },
             CurrentProgramNo = device.CurrentProgramNo ?? "-",
+            CurrentDrawingNumber = string.IsNullOrWhiteSpace(device.CurrentDrawingNumber) ? "-" : device.CurrentDrawingNumber,
             SpindleSpeedText = device.SpindleSpeedRpm is null ? "-" : $"{device.SpindleSpeedRpm} rpm",
             SpindleLoadText = device.SpindleLoadPercent is null ? "-" : $"{device.SpindleLoadPercent:F1}%",
             DataQualityText = TranslateDataQuality(device.DataQualityCode),
@@ -1494,6 +1497,7 @@ public partial class MainWindow : Window
         public required Brush HealthBackground { get; init; }
         public required Brush HealthForeground { get; init; }
         public required string CurrentProgramNo { get; init; }
+        public required string CurrentDrawingNumber { get; init; }
         public required string SpindleSpeedText { get; init; }
         public required string SpindleLoadText { get; init; }
         public required string DataQualityText { get; init; }
@@ -1522,6 +1526,8 @@ public partial class MainWindow : Window
         public required string StateText { get; init; }
         public required string StartAtText { get; init; }
         public required string EndAtText { get; init; }
+        public required string ProgramNoText { get; init; }
+        public required string DrawingNumberText { get; init; }
         public required string DurationSecondsText { get; init; }
         public required string AlarmNumberText { get; init; }
         public required string AlarmMessage { get; init; }

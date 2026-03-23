@@ -34,6 +34,8 @@ public sealed class MachineRealtimeSnapshotDto
 
     public string? CurrentProgramName { get; set; }
 
+    public string? CurrentDrawingNumber { get; set; }
+
     public long? NativePowerOnTotalMs { get; set; }
 
     public long? NativeOperatingTotalMs { get; set; }

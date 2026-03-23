@@ -52,6 +52,9 @@ internal static class FanucNative
     public static extern short cnc_exeprgname(ushort handle, out OdbExePrg buffer);
 
     [DllImport("Fwlib32.dll", CallingConvention = CallingConvention.Winapi)]
+    public static extern short cnc_rdprogdir3(ushort handle, short type, ref long topProgramNumber, ref short readCount, [Out] PrgDir3[] buffer);
+
+    [DllImport("Fwlib32.dll", CallingConvention = CallingConvention.Winapi)]
     public static extern short cnc_rdtimer(ushort handle, short timerType, out IodbTime buffer);
 
     [DllImport("Fwlib32.dll", CallingConvention = CallingConvention.Winapi)]
@@ -162,6 +165,31 @@ internal static class FanucNative
         public byte[] Name;
 
         public int ONumber;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PrgDirDate
+    {
+        public short Year;
+        public short Month;
+        public short Day;
+        public short Hour;
+        public short Minute;
+        public short Dummy;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct PrgDir3
+    {
+        public int Number;
+        public int Length;
+        public int Page;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 52)]
+        public byte[] Comment;
+
+        public PrgDirDate ModifiedAt;
+        public PrgDirDate CreatedAt;
     }
 
     [StructLayout(LayoutKind.Sequential)]

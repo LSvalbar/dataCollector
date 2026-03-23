@@ -47,12 +47,14 @@ public partial class DeviceStatusWindow : Window
         DeviceTitleTextBlock.Text = $"{device.DeviceCode} · {device.DeviceName}";
         DeviceSubtitleTextBlock.Text = $"{device.DepartmentName} / {device.WorkshopName} / {device.ControllerModel}";
         LastUpdatedTextBlock.Text = $"最近更新：{device.LastCollectedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-"}";
-        DataQualityTextBlock.Text = $"数据质量：{TranslateDataQuality(device.DataQualityCode)}";
+        DataQualityTextBlock.Text = $"采集策略：{TranslateDataQuality(device.DataQualityCode)}";
 
         ApplyStateBlock(CurrentStateBorder, CurrentStateTextBlock, device.CurrentState.ToDisplayName(), GetStateBackground(device.CurrentState), GetStateForeground(device.CurrentState));
         ApplyStateBlock(OnlineStateBorder, OnlineStateTextBlock, device.MachineOnline ? "在线" : "离线", device.MachineOnline ? CreateBrush("#DCFCE7") : CreateBrush("#E2E8F0"), device.MachineOnline ? CreateBrush("#166534") : CreateBrush("#475569"));
         ApplyStateBlock(HealthStateBorder, HealthStateTextBlock, GetHealthText(device.HealthLevel), GetHealthBackground(device.HealthLevel), GetHealthForeground(device.HealthLevel));
-        ProgramTextBlock.Text = string.IsNullOrWhiteSpace(device.CurrentProgramNo) ? "-" : $"{device.CurrentProgramNo} / {device.CurrentProgramName ?? "-"}";
+        ProgramTextBlock.Text = string.IsNullOrWhiteSpace(device.CurrentProgramNo)
+            ? "-"
+            : $"{device.CurrentProgramNo} / {device.CurrentProgramName ?? "-"}";
 
         MetricsItemsControl.ItemsSource = BuildMetricItems(device);
     }
@@ -77,6 +79,7 @@ public partial class DeviceStatusWindow : Window
             CreateMetric("报警状态", device.AlarmState ? "报警中" : "正常", device.AlarmState ? CreateBrush("#FEE2E2") : CreateBrush("#DCFCE7"), device.AlarmState ? CreateBrush("#B91C1C") : CreateBrush("#166534")),
             CreateMetric("报警号", device.CurrentAlarmNumber?.ToString() ?? "-", device.AlarmState ? CreateBrush("#FEE2E2") : CreateBrush("#F8FAFC"), device.AlarmState ? CreateBrush("#991B1B") : CreateBrush("#334155")),
             CreateMetric("报警信息", string.IsNullOrWhiteSpace(device.CurrentAlarmMessage) ? "-" : device.CurrentAlarmMessage, device.AlarmState ? CreateBrush("#FEE2E2") : CreateBrush("#F8FAFC"), device.AlarmState ? CreateBrush("#991B1B") : CreateBrush("#334155")),
+            CreateMetric("图号", string.IsNullOrWhiteSpace(device.CurrentDrawingNumber) ? "-" : device.CurrentDrawingNumber, CreateBrush("#F8FAFC"), CreateBrush("#334155")),
             CreateMetric("急停状态", device.EmergencyState ? "急停中" : "正常", device.EmergencyState ? CreateBrush("#FECACA") : CreateBrush("#DCFCE7"), device.EmergencyState ? CreateBrush("#991B1B") : CreateBrush("#166534")),
             CreateMetric("开机累计", FormatMinutes(device.NativePowerOnTotalMs), CreateBrush("#E0F2FE"), CreateBrush("#0F766E")),
             CreateMetric("运行累计", FormatMinutes(device.NativeOperatingTotalMs), CreateBrush("#DCFCE7"), CreateBrush("#166534")),
@@ -88,7 +91,7 @@ public partial class DeviceStatusWindow : Window
             CreateMetric("Agent 节点", device.AgentNodeName, CreateBrush("#F8FAFC"), CreateBrush("#334155")),
             CreateMetric("最近心跳", device.LastHeartbeatAt.ToString("yyyy-MM-dd HH:mm:ss"), CreateBrush("#F8FAFC"), CreateBrush("#334155")),
             CreateMetric("最近采集错误", string.IsNullOrWhiteSpace(device.LastCollectionError) ? "-" : device.LastCollectionError, string.IsNullOrWhiteSpace(device.LastCollectionError) ? CreateBrush("#F8FAFC") : CreateBrush("#FEE2E2"), string.IsNullOrWhiteSpace(device.LastCollectionError) ? CreateBrush("#334155") : CreateBrush("#991B1B")),
-            CreateMetric("数据质量", device.DataQualityCode ?? "-", GetDataQualityBackground(device.DataQualityCode), GetDataQualityForeground(device.DataQualityCode)),
+            CreateMetric("采集策略", TranslateDataQuality(device.DataQualityCode), GetDataQualityBackground(device.DataQualityCode), GetDataQualityForeground(device.DataQualityCode)),
         ];
     }
 

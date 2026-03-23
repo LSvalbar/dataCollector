@@ -27,7 +27,7 @@
                 </StackPanel>
                 <StackPanel Grid.Column="1">
                     <TextBlock x:Name="LastUpdatedTextBlock" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" Text="最近更新：-" />
-                    <TextBlock x:Name="DataQualityTextBlock" Margin="0,8,0,0" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" Text="数据质量：-" />
+                    <TextBlock x:Name="DataQualityTextBlock" Margin="0,8,0,0" HorizontalAlignment="Right" Foreground="{StaticResource TextSecondaryBrush}" Text="采集策略：-" />
                 </StackPanel>
             </Grid>
         </Border>

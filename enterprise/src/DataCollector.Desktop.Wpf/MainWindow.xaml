@@ -167,9 +167,10 @@
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
                                     <DataGridTextColumn Header="程序号" Binding="{Binding CurrentProgramNo}" Width="110" />
+                                    <DataGridTextColumn Header="图号" Binding="{Binding CurrentDrawingNumber}" Width="150" />
                                     <DataGridTextColumn Header="主轴转速" Binding="{Binding SpindleSpeedText}" Width="92" />
                                     <DataGridTextColumn Header="主轴负载" Binding="{Binding SpindleLoadText}" Width="96" />
-                                    <DataGridTextColumn Header="采集质量" Binding="{Binding DataQualityText}" Width="110" />
+                                    <DataGridTextColumn Header="采集策略" Binding="{Binding DataQualityText}" Width="110" />
                                     <DataGridTextColumn Header="最近采集" Binding="{Binding LastCollectedAtText}" Width="160" />
                                     <DataGridTextColumn Header="最近心跳" Binding="{Binding LastHeartbeatAtText}" Width="160" />
                                 </DataGrid.Columns>
@@ -351,7 +352,7 @@
                                 <DataGridTextColumn Header="报警时长" Binding="{Binding AlarmMinutesText}" Width="115" />
                                 <DataGridTextColumn Header="开机率(%)" Binding="{Binding PowerOnRateText}" Width="90" />
                                 <DataGridTextColumn Header="利用率(%)" Binding="{Binding UtilizationRateText}" Width="90" />
-                                <DataGridTextColumn Header="采集质量" Binding="{Binding DataQualityText}" Width="110" />
+                                <DataGridTextColumn Header="采集策略" Binding="{Binding DataQualityText}" Width="110" />
                             </DataGrid.Columns>
                         </DataGrid>
                     </Border>
@@ -396,10 +397,12 @@
                                 </DataGridTemplateColumn>
                                 <DataGridTextColumn Header="开始时间" Binding="{Binding StartAtText}" Width="180" />
                                 <DataGridTextColumn Header="截止时间" Binding="{Binding EndAtText}" Width="180" />
+                                <DataGridTextColumn Header="程序号" Binding="{Binding ProgramNoText}" Width="110" />
+                                <DataGridTextColumn Header="图号" Binding="{Binding DrawingNumberText}" Width="160" />
                                 <DataGridTextColumn Header="时长" Binding="{Binding DurationSecondsText}" Width="110" />
                                 <DataGridTextColumn Header="报警号" Binding="{Binding AlarmNumberText}" Width="90" />
                                 <DataGridTextColumn Header="报警信息" Binding="{Binding AlarmMessage}" Width="220" />
-                                <DataGridTextColumn Header="采集质量" Binding="{Binding DataQualityText}" Width="140" />
+                                <DataGridTextColumn Header="采集策略" Binding="{Binding DataQualityText}" Width="140" />
                             </DataGrid.Columns>
                         </DataGrid>
                     </Border>

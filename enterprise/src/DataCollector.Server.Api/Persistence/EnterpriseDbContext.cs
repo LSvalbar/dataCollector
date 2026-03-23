@@ -45,6 +45,7 @@ public sealed class EnterpriseDbContext : DbContext
             entity.Property(item => item.ResponsiblePerson).HasMaxLength(128);
             entity.Property(item => item.CurrentProgramNo).HasMaxLength(64);
             entity.Property(item => item.CurrentProgramName).HasMaxLength(256);
+            entity.Property(item => item.CurrentDrawingNumber).HasMaxLength(256);
             entity.Property(item => item.CurrentAlarmMessage).HasMaxLength(1024);
             entity.Property(item => item.ControllerModeText).HasMaxLength(64);
             entity.Property(item => item.OeeStatusText).HasMaxLength(64);
@@ -119,6 +120,8 @@ public sealed class EnterpriseDbContext : DbContext
             entity.HasKey(item => item.TimelineSegmentId);
             entity.HasIndex(item => new { item.DeviceId, item.ReportDateKey, item.StartAt });
             entity.Property(item => item.DataQualityCode).HasMaxLength(64);
+            entity.Property(item => item.ProgramNo).HasMaxLength(64);
+            entity.Property(item => item.DrawingNumber).HasMaxLength(256);
             entity.Property(item => item.AlarmMessage).HasMaxLength(1024);
             entity.HasOne(item => item.Device)
                 .WithMany(item => item.TimelineSegments)
@@ -173,6 +176,8 @@ public sealed class DeviceEntity
     public string? CurrentProgramNo { get; set; }
 
     public string? CurrentProgramName { get; set; }
+
+    public string? CurrentDrawingNumber { get; set; }
 
     public int? SpindleSpeedRpm { get; set; }
 
@@ -303,6 +308,10 @@ public sealed class TimelineSegmentEntity
     public double DurationMinutes { get; set; }
 
     public string DataQualityCode { get; set; } = "native_preferred";
+
+    public string? ProgramNo { get; set; }
+
+    public string? DrawingNumber { get; set; }
 
     public int? AlarmNumber { get; set; }
 

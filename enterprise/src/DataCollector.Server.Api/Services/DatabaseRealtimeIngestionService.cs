@@ -113,6 +113,7 @@ public sealed class DatabaseRealtimeIngestionService : IRealtimeIngestionService
         device.LastHeartbeatAt = snapshot.CollectedAt;
         device.CurrentProgramNo = snapshot.CurrentProgramNo;
         device.CurrentProgramName = snapshot.CurrentProgramName;
+        device.CurrentDrawingNumber = snapshot.CurrentDrawingNumber;
         device.SpindleSpeedRpm = snapshot.SpindleSpeedRpm;
         device.SpindleLoadPercent = snapshot.SpindleLoadPercent;
         device.AutomaticMode = snapshot.AutomaticMode;
@@ -157,6 +158,8 @@ public sealed class DatabaseRealtimeIngestionService : IRealtimeIngestionService
         var normalizedState = NormalizeState(snapshot.CurrentState);
         if (lastSegment.State == normalizedState &&
             lastSegment.DataQualityCode == snapshot.DataQualityCode &&
+            string.Equals(lastSegment.ProgramNo, snapshot.CurrentProgramNo, StringComparison.Ordinal) &&
+            string.Equals(lastSegment.DrawingNumber, snapshot.CurrentDrawingNumber, StringComparison.Ordinal) &&
             lastSegment.AlarmNumber == snapshot.CurrentAlarmNumber &&
             string.Equals(lastSegment.AlarmMessage, snapshot.CurrentAlarmMessage, StringComparison.Ordinal))
         {
@@ -189,6 +192,8 @@ public sealed class DatabaseRealtimeIngestionService : IRealtimeIngestionService
             EndAt = snapshot.CollectedAt,
             DurationMinutes = 0,
             DataQualityCode = snapshot.DataQualityCode,
+            ProgramNo = snapshot.CurrentProgramNo,
+            DrawingNumber = snapshot.CurrentDrawingNumber,
             AlarmNumber = snapshot.CurrentAlarmNumber,
             AlarmMessage = snapshot.CurrentAlarmMessage,
         };

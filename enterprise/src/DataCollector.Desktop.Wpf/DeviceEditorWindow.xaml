@@ -16,19 +16,7 @@
         </Grid.RowDefinitions>
 
         <Border Style="{StaticResource CardBorderStyle}" Padding="18">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock FontFamily="Segoe Fluent Icons"
-                           FontSize="20"
-                           Foreground="{StaticResource TextPrimaryBrush}"
-                           Text="&#xE8F1;" />
-                <StackPanel Grid.Column="1" Margin="12,0,0,0">
-                    <TextBlock FontSize="20" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="设备信息" />
-                </StackPanel>
-            </Grid>
+            <TextBlock FontSize="20" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="设备信息" />
         </Border>
 
         <Border Grid.Row="1" Margin="0,18,0,0" Style="{StaticResource CardBorderStyle}">

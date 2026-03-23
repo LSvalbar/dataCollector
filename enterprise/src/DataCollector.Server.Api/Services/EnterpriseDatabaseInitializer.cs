@@ -67,7 +67,7 @@ public sealed class EnterpriseDatabaseInitializer
                 "DeviceCode", "DeviceName", "Manufacturer", "ControllerModel", "ProtocolName",
                 "IpAddress", "Port", "AgentNodeName", "ResponsiblePerson", "CurrentState",
                 "HealthLevel", "IsEnabled", "MachineOnline", "LastHeartbeatAt", "LastCollectedAt",
-                "CurrentProgramNo", "CurrentProgramName", "SpindleSpeedRpm", "SpindleLoadPercent",
+                "CurrentProgramNo", "CurrentProgramName", "CurrentDrawingNumber", "SpindleSpeedRpm", "SpindleLoadPercent",
                 "AutomaticMode", "OperationMode", "AlarmState", "CurrentAlarmNumber", "CurrentAlarmMessage", "EmergencyState", "ControllerModeText",
                 "OeeStatusText", "NativePowerOnTotalMs", "NativeOperatingTotalMs", "NativeCuttingTotalMs",
                 "NativeFreeTotalMs", "DataQualityCode", "LastCollectionError"
@@ -82,7 +82,7 @@ public sealed class EnterpriseDatabaseInitializer
             ["roles"] = ["RoleCode", "RoleName", "Description"],
             ["user_roles"] = ["UserCode", "RoleCode"],
             ["role_permissions"] = ["RoleCode", "PermissionCode"],
-            ["timeline_segments"] = ["TimelineSegmentId", "DeviceId", "ReportDateKey", "State", "StartAt", "EndAt", "DurationMinutes", "DataQualityCode", "AlarmNumber", "AlarmMessage"],
+            ["timeline_segments"] = ["TimelineSegmentId", "DeviceId", "ReportDateKey", "State", "StartAt", "EndAt", "DurationMinutes", "DataQualityCode", "ProgramNo", "DrawingNumber", "AlarmNumber", "AlarmMessage"],
         };
 
         foreach (var table in requiredSchema)
