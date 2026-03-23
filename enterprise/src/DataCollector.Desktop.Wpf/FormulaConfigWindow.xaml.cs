@@ -33,15 +33,17 @@ public partial class FormulaConfigWindow : Window
             }
         }
 
+        PowerOnMetricComboBox.ItemsSource = _visibleOptions;
         UtilizationMetricComboBox.ItemsSource = _visibleOptions;
 
-        PowerOnMetricTextBlock.Text = "开机时间";
+        PowerOnMetricComboBox.SelectedValue = powerOnSelection.PrimaryVariable;
         UtilizationMetricComboBox.SelectedValue = utilizationSelection.PrimaryVariable;
         PowerOnStandardHoursTextBox.Text = powerOnSelection.StandardWorkHours.ToString("0.##", CultureInfo.InvariantCulture);
         UtilizationStandardHoursTextBox.Text = utilizationSelection.StandardWorkHours.ToString("0.##", CultureInfo.InvariantCulture);
         PowerOnCoefficientTextBox.Text = powerOnSelection.Coefficient.ToString("0.##", CultureInfo.InvariantCulture);
         UtilizationCoefficientTextBox.Text = utilizationSelection.Coefficient.ToString("0.##", CultureInfo.InvariantCulture);
 
+        PowerOnMetricComboBox.SelectionChanged += (_, _) => UpdatePreview();
         UtilizationMetricComboBox.SelectionChanged += (_, _) => UpdatePreview();
         PowerOnStandardHoursTextBox.TextChanged += (_, _) => UpdatePreview();
         UtilizationStandardHoursTextBox.TextChanged += (_, _) => UpdatePreview();
@@ -60,7 +62,7 @@ public partial class FormulaConfigWindow : Window
 
     private void UpdatePreview()
     {
-        PowerOnPreviewTextBlock.Text = $"当前公式：{BuildPreview("开机时间", PowerOnStandardHoursTextBox.Text, PowerOnCoefficientTextBox.Text)}";
+        PowerOnPreviewTextBlock.Text = $"当前公式：{BuildPreview(PowerOnMetricComboBox.SelectedValue as string, PowerOnStandardHoursTextBox.Text, PowerOnCoefficientTextBox.Text)}";
         UtilizationPreviewTextBlock.Text = $"当前公式：{BuildPreview(UtilizationMetricComboBox.SelectedValue as string, UtilizationStandardHoursTextBox.Text, UtilizationCoefficientTextBox.Text)}";
     }
 
@@ -102,7 +104,8 @@ public partial class FormulaConfigWindow : Window
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
-        if (UtilizationMetricComboBox.SelectedValue is not string utilizationVariable)
+        if (PowerOnMetricComboBox.SelectedValue is not string powerOnVariable ||
+            UtilizationMetricComboBox.SelectedValue is not string utilizationVariable)
         {
             MessageBox.Show(this, "请先从下拉列表中选择时间项。", "校验失败", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -122,7 +125,7 @@ public partial class FormulaConfigWindow : Window
             return;
         }
 
-        PowerOnSelection = new FormulaSelection("开机时间", powerOnStandardHours, powerOnCoefficient);
+        PowerOnSelection = new FormulaSelection(powerOnVariable, powerOnStandardHours, powerOnCoefficient);
         UtilizationSelection = new FormulaSelection(utilizationVariable, utilizationStandardHours, utilizationCoefficient);
         DialogResult = true;
         Close();
@@ -141,7 +144,9 @@ public partial class FormulaConfigWindow : Window
 
     private void OnVisibleOptionsChanged()
     {
+        PowerOnMetricComboBox.Items.Refresh();
         UtilizationMetricComboBox.Items.Refresh();
+        PowerOnMetricComboBox.SelectedValue ??= _visibleOptions.FirstOrDefault()?.VariableName;
         UtilizationMetricComboBox.SelectedValue ??= _visibleOptions.FirstOrDefault()?.VariableName;
         UpdateVisibleOptionsSummary();
         UpdatePreview();

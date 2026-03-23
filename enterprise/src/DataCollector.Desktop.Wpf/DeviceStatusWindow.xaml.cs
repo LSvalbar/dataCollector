@@ -47,7 +47,7 @@ public partial class DeviceStatusWindow : Window
         DeviceTitleTextBlock.Text = $"{device.DeviceCode} · {device.DeviceName}";
         DeviceSubtitleTextBlock.Text = $"{device.DepartmentName} / {device.WorkshopName} / {device.ControllerModel}";
         LastUpdatedTextBlock.Text = $"最近更新：{device.LastCollectedAt?.ToString("yyyy-MM-dd HH:mm:ss") ?? "-"}";
-        DataQualityTextBlock.Text = $"数据质量：{device.DataQualityCode ?? "-"}";
+        DataQualityTextBlock.Text = $"数据质量：{TranslateDataQuality(device.DataQualityCode)}";
 
         ApplyStateBlock(CurrentStateBorder, CurrentStateTextBlock, device.CurrentState.ToDisplayName(), GetStateBackground(device.CurrentState), GetStateForeground(device.CurrentState));
         ApplyStateBlock(OnlineStateBorder, OnlineStateTextBlock, device.MachineOnline ? "在线" : "离线", device.MachineOnline ? CreateBrush("#DCFCE7") : CreateBrush("#E2E8F0"), device.MachineOnline ? CreateBrush("#166534") : CreateBrush("#475569"));
@@ -75,11 +75,13 @@ public partial class DeviceStatusWindow : Window
             CreateMetric("控制模式", device.ControllerModeText ?? "-", CreateBrush("#F8FAFC"), CreateBrush("#334155")),
             CreateMetric("OEE 状态", device.OeeStatusText ?? "-", CreateBrush("#F8FAFC"), CreateBrush("#334155")),
             CreateMetric("报警状态", device.AlarmState ? "报警中" : "正常", device.AlarmState ? CreateBrush("#FEE2E2") : CreateBrush("#DCFCE7"), device.AlarmState ? CreateBrush("#B91C1C") : CreateBrush("#166534")),
+            CreateMetric("报警号", device.CurrentAlarmNumber?.ToString() ?? "-", device.AlarmState ? CreateBrush("#FEE2E2") : CreateBrush("#F8FAFC"), device.AlarmState ? CreateBrush("#991B1B") : CreateBrush("#334155")),
+            CreateMetric("报警信息", string.IsNullOrWhiteSpace(device.CurrentAlarmMessage) ? "-" : device.CurrentAlarmMessage, device.AlarmState ? CreateBrush("#FEE2E2") : CreateBrush("#F8FAFC"), device.AlarmState ? CreateBrush("#991B1B") : CreateBrush("#334155")),
             CreateMetric("急停状态", device.EmergencyState ? "急停中" : "正常", device.EmergencyState ? CreateBrush("#FECACA") : CreateBrush("#DCFCE7"), device.EmergencyState ? CreateBrush("#991B1B") : CreateBrush("#166534")),
-            CreateMetric("开机累计", FormatDuration(device.NativePowerOnTotalMs), CreateBrush("#E0F2FE"), CreateBrush("#0F766E")),
-            CreateMetric("运行累计", FormatDuration(device.NativeOperatingTotalMs), CreateBrush("#DCFCE7"), CreateBrush("#166534")),
-            CreateMetric("切削累计", FormatDuration(device.NativeCuttingTotalMs), CreateBrush("#DBEAFE"), CreateBrush("#1D4ED8")),
-            CreateMetric("等待累计", FormatDuration(device.NativeFreeTotalMs), CreateBrush("#FEF3C7"), CreateBrush("#92400E")),
+            CreateMetric("开机累计", FormatMinutes(device.NativePowerOnTotalMs), CreateBrush("#E0F2FE"), CreateBrush("#0F766E")),
+            CreateMetric("运行累计", FormatMinutes(device.NativeOperatingTotalMs), CreateBrush("#DCFCE7"), CreateBrush("#166534")),
+            CreateMetric("切削累计", FormatMinutes(device.NativeCuttingTotalMs), CreateBrush("#DBEAFE"), CreateBrush("#1D4ED8")),
+            CreateMetric("待机累计", FormatMinutes(device.NativeFreeTotalMs), CreateBrush("#FEF3C7"), CreateBrush("#92400E")),
             CreateMetric("系统版本", device.ControllerModel, CreateBrush("#F8FAFC"), CreateBrush("#334155")),
             CreateMetric("负责人", string.IsNullOrWhiteSpace(device.ResponsiblePerson) ? "-" : device.ResponsiblePerson, CreateBrush("#F8FAFC"), CreateBrush("#334155")),
             CreateMetric("设备地址", $"{device.IpAddress}:{device.Port}", CreateBrush("#F8FAFC"), CreateBrush("#334155")),
@@ -101,9 +103,15 @@ public partial class DeviceStatusWindow : Window
         };
     }
 
-    private static string FormatDuration(long? milliseconds)
+    private static string FormatMinutes(long? milliseconds)
     {
-        return DurationDisplayFormatter.FormatFromMilliseconds(milliseconds);
+        if (!milliseconds.HasValue)
+        {
+            return "-";
+        }
+
+        var minutes = Math.Max(0d, Math.Round(milliseconds.Value / 60000d, MidpointRounding.AwayFromZero));
+        return $"{minutes:0} 分钟";
     }
 
     private static string GetHealthText(DeviceHealthLevel healthLevel) =>
@@ -186,6 +194,22 @@ public partial class DeviceStatusWindow : Window
             _ => CreateBrush("#475569"),
         };
     }
+
+    private static string TranslateDataQuality(string? qualityCode) =>
+        qualityCode?.Trim().ToLowerInvariant() switch
+        {
+            "native_preferred" => "原生优先",
+            "focas_realtime" => "实时采集",
+            "focas_error" => "采集异常",
+            "stale_snapshot" => "快照滞后",
+            "manual_disabled" => "手动停用",
+            "not_collected" => "未采集",
+            "fallback" => "回退计算",
+            "estimated" => "估算值",
+            "gap" => "数据缺口",
+            null or "" => "-",
+            _ => qualityCode!,
+        };
 
     private static Brush GetStateBackground(MachineOperationalState state) =>
         state switch

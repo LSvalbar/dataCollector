@@ -59,6 +59,10 @@ public sealed class DailyReportRowDto
 
     public DateOnly ReportDate { get; set; }
 
+    public DateOnly ReportDateFrom { get; set; }
+
+    public DateOnly ReportDateTo { get; set; }
+
     public double PowerOnMinutes { get; set; }
 
     public double ProcessingMinutes { get; set; }
@@ -86,7 +90,13 @@ public sealed class DailyReportRowDto
 
 public sealed class DailyReportResponse
 {
-    public DateOnly ReportDate { get; set; }
+    public DateOnly ReportDateFrom { get; set; }
+
+    public DateOnly ReportDateTo { get; set; }
+
+    public bool IncludeAllDevices { get; set; }
+
+    public Guid? SelectedDeviceId { get; set; }
 
     public required IReadOnlyList<FormulaDefinitionDto> Formulas { get; set; }
 
@@ -108,6 +118,10 @@ public sealed class TimelineSegmentDto
     public int DurationSeconds { get; set; }
 
     public string DataQualityCode { get; set; } = "native_preferred";
+
+    public int? AlarmNumber { get; set; }
+
+    public string? AlarmMessage { get; set; }
 }
 
 public sealed class DeviceTimelineResponse

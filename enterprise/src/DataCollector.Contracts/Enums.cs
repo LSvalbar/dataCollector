@@ -24,7 +24,7 @@ public static class MachineOperationalStateExtensions
         state switch
         {
             MachineOperationalState.Processing => "加工",
-            MachineOperationalState.Waiting => "等待",
+            MachineOperationalState.Waiting => "待机",
             MachineOperationalState.Standby => "待机",
             MachineOperationalState.PowerOff => "关机",
             MachineOperationalState.Alarm => "报警",

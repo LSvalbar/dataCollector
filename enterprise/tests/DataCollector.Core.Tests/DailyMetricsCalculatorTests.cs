@@ -25,8 +25,8 @@ public sealed class DailyMetricsCalculatorTests
 
         Assert.Equal(270, result.PowerOnMinutes);
         Assert.Equal(180, result.ProcessingMinutes);
-        Assert.Equal(45, result.WaitingMinutes);
-        Assert.Equal(30, result.StandbyMinutes);
+        Assert.Equal(0, result.WaitingMinutes);
+        Assert.Equal(75, result.StandbyMinutes);
         Assert.Equal(120, result.PowerOffMinutes);
         Assert.Equal(10, result.AlarmMinutes);
         Assert.Equal(5, result.EmergencyMinutes);

@@ -18,6 +18,8 @@ internal static class FanucNative
     public const short EwReset = -2;
     public const short EwBusy = -1;
     public const short EwOk = 0;
+    public const short AlarmTypeAll = -1;
+    public const short AlarmInformation2 = 1;
     public const short PanelSignalAll = -1;
     public const short TimerPowerOn = 0;
     public const short TimerOperating = 1;
@@ -41,10 +43,22 @@ internal static class FanucNative
     public static extern short cnc_acts(ushort handle, out OdbAct buffer);
 
     [DllImport("Fwlib32.dll", CallingConvention = CallingConvention.Winapi)]
+    public static extern short cnc_rdspmeter(ushort handle, short dataType, ref short dataCount, out OdbSpLoad buffer);
+
+    [DllImport("Fwlib32.dll", CallingConvention = CallingConvention.Winapi)]
+    public static extern short cnc_rdspload(ushort handle, short spindleNumber, out OdbSpn buffer);
+
+    [DllImport("Fwlib32.dll", CallingConvention = CallingConvention.Winapi)]
     public static extern short cnc_exeprgname(ushort handle, out OdbExePrg buffer);
 
     [DllImport("Fwlib32.dll", CallingConvention = CallingConvention.Winapi)]
     public static extern short cnc_rdtimer(ushort handle, short timerType, out IodbTime buffer);
+
+    [DllImport("Fwlib32.dll", CallingConvention = CallingConvention.Winapi)]
+    public static extern short cnc_rdalmmsg2(ushort handle, short alarmType, ref short readCount, [Out] OdbAlmMsg2[] buffer);
+
+    [DllImport("Fwlib32.dll", CallingConvention = CallingConvention.Winapi)]
+    public static extern short cnc_rdalminfo2(ushort handle, short informationType, short alarmType, short axis, out AlmInfo2 buffer);
 
     public static string DescribeError(short code)
     {
@@ -113,6 +127,35 @@ internal static class FanucNative
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct LoadElement
+    {
+        public int Data;
+        public short Decimal;
+        public short Unit;
+        public byte Name;
+        public byte Suffix1;
+        public byte Suffix2;
+        public byte Reserve;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct OdbSpLoad
+    {
+        public LoadElement SpindleLoad;
+        public LoadElement SpindleSpeed;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct OdbSpn
+    {
+        public short DataNumber;
+        public short Type;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+        public short[] Data;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct OdbExePrg
     {
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 36)]
@@ -126,5 +169,51 @@ internal static class FanucNative
     {
         public int Minute;
         public int Millisecond;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct OdbAlmMsg2
+    {
+        public int AlarmNumber;
+        public short Type;
+        public short Axis;
+        public short Dummy;
+        public short MessageLength;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 64)]
+        public byte[] AlarmMessage;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct AlmInfo2Entry
+    {
+        public short Axis;
+        public short AlarmNumber;
+        public short MessageLength;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 34)]
+        public byte[] AlarmMessage;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct AlmInfo2Alarm2
+    {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 5)]
+        public AlmInfo2Entry[] Alarms;
+
+        public short DataEnd;
+    }
+
+    [StructLayout(LayoutKind.Explicit)]
+    public struct AlmInfo2Union
+    {
+        [FieldOffset(0)]
+        public AlmInfo2Alarm2 Alarm2;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct AlmInfo2
+    {
+        public AlmInfo2Union Union;
     }
 }

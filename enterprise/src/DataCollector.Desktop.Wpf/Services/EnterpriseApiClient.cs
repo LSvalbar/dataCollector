@@ -40,9 +40,20 @@ public sealed class EnterpriseApiClient : IDisposable
         return GetJsonAsync<DeviceManagementOverviewDto>("/api/device-management/overview", cancellationToken);
     }
 
-    public Task<DailyReportResponse?> GetDailyReportAsync(DateOnly date, CancellationToken cancellationToken = default)
+    public Task<DailyReportResponse?> GetDailyReportAsync(
+        DateOnly from,
+        DateOnly to,
+        Guid? deviceId,
+        bool allDevices,
+        CancellationToken cancellationToken = default)
     {
-        return GetJsonAsync<DailyReportResponse>($"/api/reports/daily?date={date:yyyy-MM-dd}", cancellationToken);
+        var query = $"/api/reports/daily?from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}&allDevices={allDevices.ToString().ToLowerInvariant()}";
+        if (deviceId.HasValue)
+        {
+            query += $"&deviceId={deviceId.Value:D}";
+        }
+
+        return GetJsonAsync<DailyReportResponse>(query, cancellationToken);
     }
 
     public Task<IReadOnlyList<FormulaDefinitionDto>?> GetFormulasAsync(CancellationToken cancellationToken = default)

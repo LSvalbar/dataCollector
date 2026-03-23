@@ -73,23 +73,27 @@ internal sealed class FanucMachineSession : IDisposable
             throw CreateFocasException("cnc_statinfo", statusResult);
         }
 
-        var spindleSpeed = ReadSpindleSpeed();
+        var spindleMetrics = ReadSpindleMetrics();
         var program = ReadCurrentProgram();
         var timers = ReadTimers();
+        var alarm = ReadCurrentAlarm(status.Alarm != 0);
 
         return new MachineRealtimeSnapshotDto
         {
             DeviceCode = _machine.DeviceCode,
             CollectedAt = collectedAt,
             MachineOnline = true,
-            CurrentState = DeriveState(status.OperationMode, status.Alarm != 0, status.Emergency != 0, spindleSpeed),
+            CurrentState = DeriveState(status.OperationMode, status.Alarm != 0, status.Emergency != 0, spindleMetrics.SpindleSpeedRpm),
             AutomaticMode = status.AutomaticMode,
             OperationMode = status.OperationMode,
             EmergencyState = status.Emergency != 0,
             AlarmState = status.Alarm != 0,
+            CurrentAlarmNumber = alarm.AlarmNumber,
+            CurrentAlarmMessage = alarm.AlarmMessage,
             ControllerModeText = ControllerModeText(status.AutomaticMode),
             OeeStatusText = DeriveOeeText(status.OperationMode, status.Alarm != 0, status.Emergency != 0),
-            SpindleSpeedRpm = spindleSpeed,
+            SpindleSpeedRpm = spindleMetrics.SpindleSpeedRpm,
+            SpindleLoadPercent = spindleMetrics.SpindleLoadPercent,
             CurrentProgramNo = program.ProgramNo,
             CurrentProgramName = program.ProgramName,
             NativePowerOnTotalMs = timers.PowerOnTotalMs,
@@ -196,10 +200,37 @@ internal sealed class FanucMachineSession : IDisposable
         _connected = false;
     }
 
-    private int? ReadSpindleSpeed()
+    private SpindleMetrics ReadSpindleMetrics()
     {
-        var result = FanucNative.cnc_acts(_handle, out var buffer);
-        return result == FanucNative.EwOk ? Math.Max(0, buffer.Data) : null;
+        int? spindleSpeed = null;
+        double? spindleLoad = null;
+
+        var actsResult = FanucNative.cnc_acts(_handle, out var actBuffer);
+        if (actsResult == FanucNative.EwOk)
+        {
+            spindleSpeed = Math.Max(0, actBuffer.Data);
+        }
+
+        short dataCount = 1;
+        var meterResult = FanucNative.cnc_rdspmeter(_handle, FanucNative.PanelSignalAll, ref dataCount, out var meterBuffer);
+        if (meterResult == FanucNative.EwOk)
+        {
+            spindleLoad = ScaleNumericValue(meterBuffer.SpindleLoad.Data, meterBuffer.SpindleLoad.Decimal);
+            spindleSpeed ??= (int?)ScaleNumericValue(meterBuffer.SpindleSpeed.Data, meterBuffer.SpindleSpeed.Decimal);
+        }
+
+        if (!spindleLoad.HasValue)
+        {
+            var loadResult = FanucNative.cnc_rdspload(_handle, 1, out var loadBuffer);
+            if (loadResult == FanucNative.EwOk && loadBuffer.Data is { Length: > 0 })
+            {
+                spindleLoad = Math.Max(0, (int)loadBuffer.Data[0]);
+            }
+        }
+
+        return new SpindleMetrics(
+            spindleSpeed.HasValue ? Math.Max(0, spindleSpeed.Value) : null,
+            spindleLoad);
     }
 
     private (string? ProgramNo, string? ProgramName) ReadCurrentProgram()
@@ -248,11 +279,6 @@ internal sealed class FanucMachineSession : IDisposable
             return MachineOperationalState.Processing;
         }
 
-        if (_machine.WaitingOperationModes.Contains(operationMode))
-        {
-            return MachineOperationalState.Waiting;
-        }
-
         return MachineOperationalState.Standby;
     }
 
@@ -292,6 +318,60 @@ internal sealed class FanucMachineSession : IDisposable
         return "Interrupted";
     }
 
+    private (int? AlarmNumber, string? AlarmMessage) ReadCurrentAlarm(bool alarmActive)
+    {
+        if (!alarmActive)
+        {
+            return (null, null);
+        }
+
+        short readCount = 10;
+        var alarmMessages = new FanucNative.OdbAlmMsg2[10];
+        var messageResult = FanucNative.cnc_rdalmmsg2(_handle, FanucNative.AlarmTypeAll, ref readCount, alarmMessages);
+        if (messageResult == FanucNative.EwOk)
+        {
+            var limit = Math.Max(0, Math.Min((int)readCount, alarmMessages.Length));
+            for (var index = 0; index < limit; index++)
+            {
+                var message = alarmMessages[index];
+                var alarmMessage = DecodeAscii(message.AlarmMessage).Trim();
+                if (message.AlarmNumber == 0 && string.IsNullOrWhiteSpace(alarmMessage))
+                {
+                    continue;
+                }
+
+                return (message.AlarmNumber == 0 ? null : message.AlarmNumber, string.IsNullOrWhiteSpace(alarmMessage) ? null : alarmMessage);
+            }
+        }
+
+        var infoResult = FanucNative.cnc_rdalminfo2(_handle, FanucNative.AlarmInformation2, FanucNative.AlarmTypeAll, 0, out var alarmInfo);
+        if (infoResult == FanucNative.EwOk && alarmInfo.Union.Alarm2.Alarms is { Length: > 0 })
+        {
+            foreach (var entry in alarmInfo.Union.Alarm2.Alarms)
+            {
+                var alarmMessage = DecodeAscii(entry.AlarmMessage).Trim();
+                if (entry.AlarmNumber == 0 && string.IsNullOrWhiteSpace(alarmMessage))
+                {
+                    continue;
+                }
+
+                return (entry.AlarmNumber == 0 ? null : entry.AlarmNumber, string.IsNullOrWhiteSpace(alarmMessage) ? null : alarmMessage);
+            }
+        }
+
+        return (null, null);
+    }
+
+    private static double ScaleNumericValue(int value, short decimals)
+    {
+        if (decimals <= 0)
+        {
+            return value;
+        }
+
+        return value / Math.Pow(10, decimals);
+    }
+
     private static MachineRealtimeSnapshotDto CloneSnapshot(
         MachineRealtimeSnapshotDto source,
         DateTimeOffset collectedAt,
@@ -308,6 +388,8 @@ internal sealed class FanucMachineSession : IDisposable
             OperationMode = source.OperationMode,
             EmergencyState = source.EmergencyState,
             AlarmState = source.AlarmState,
+            CurrentAlarmNumber = source.CurrentAlarmNumber,
+            CurrentAlarmMessage = source.CurrentAlarmMessage,
             ControllerModeText = source.ControllerModeText,
             OeeStatusText = source.OeeStatusText,
             SpindleSpeedRpm = source.SpindleSpeedRpm,
@@ -333,4 +415,6 @@ internal sealed class FanucMachineSession : IDisposable
     {
         return Encoding.ASCII.GetString(raw).Replace("\0", string.Empty).Trim();
     }
+
+    private sealed record SpindleMetrics(int? SpindleSpeedRpm, double? SpindleLoadPercent);
 }

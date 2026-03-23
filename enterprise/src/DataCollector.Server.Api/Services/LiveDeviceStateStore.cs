@@ -57,6 +57,7 @@ public sealed class LiveDeviceStateStore
                 {
                     last.EndAt = now;
                     last.DurationMinutes = Math.Round((last.EndAt - last.StartAt).TotalMinutes, 2, MidpointRounding.AwayFromZero);
+                    last.DurationSeconds = (int)Math.Max(0, Math.Round((last.EndAt - last.StartAt).TotalSeconds, MidpointRounding.AwayFromZero));
                 }
             }
 
@@ -93,7 +94,7 @@ public sealed class LiveDeviceStateStore
 
         if (segments.Count == 0)
         {
-            segments.Add(CreateSegment(snapshot.CurrentState, snapshot.CollectedAt, snapshot.DataQualityCode));
+            segments.Add(CreateSegment(snapshot.CurrentState, snapshot.CollectedAt, snapshot.DataQualityCode, snapshot.CurrentAlarmNumber, snapshot.CurrentAlarmMessage));
             return;
         }
 
@@ -103,12 +104,16 @@ public sealed class LiveDeviceStateStore
             return;
         }
 
-        if (last.State == snapshot.CurrentState && last.DataQualityCode == snapshot.DataQualityCode)
+        if (last.State == snapshot.CurrentState &&
+            last.DataQualityCode == snapshot.DataQualityCode &&
+            last.AlarmNumber == snapshot.CurrentAlarmNumber &&
+            string.Equals(last.AlarmMessage, snapshot.CurrentAlarmMessage, StringComparison.Ordinal))
         {
             if (snapshot.CollectedAt > last.EndAt)
             {
                 last.EndAt = snapshot.CollectedAt;
                 last.DurationMinutes = Math.Round((last.EndAt - last.StartAt).TotalMinutes, 2, MidpointRounding.AwayFromZero);
+                last.DurationSeconds = (int)Math.Max(0, Math.Round((last.EndAt - last.StartAt).TotalSeconds, MidpointRounding.AwayFromZero));
             }
 
             return;
@@ -118,12 +123,18 @@ public sealed class LiveDeviceStateStore
         {
             last.EndAt = snapshot.CollectedAt;
             last.DurationMinutes = Math.Round((last.EndAt - last.StartAt).TotalMinutes, 2, MidpointRounding.AwayFromZero);
+            last.DurationSeconds = (int)Math.Max(0, Math.Round((last.EndAt - last.StartAt).TotalSeconds, MidpointRounding.AwayFromZero));
         }
 
-        segments.Add(CreateSegment(snapshot.CurrentState, snapshot.CollectedAt, snapshot.DataQualityCode));
+        segments.Add(CreateSegment(snapshot.CurrentState, snapshot.CollectedAt, snapshot.DataQualityCode, snapshot.CurrentAlarmNumber, snapshot.CurrentAlarmMessage));
     }
 
-    private static TimelineSegmentDto CreateSegment(MachineOperationalState state, DateTimeOffset timestamp, string dataQualityCode)
+    private static TimelineSegmentDto CreateSegment(
+        MachineOperationalState state,
+        DateTimeOffset timestamp,
+        string dataQualityCode,
+        int? alarmNumber,
+        string? alarmMessage)
     {
         return new TimelineSegmentDto
         {
@@ -131,7 +142,10 @@ public sealed class LiveDeviceStateStore
             StartAt = timestamp,
             EndAt = timestamp,
             DurationMinutes = 0,
+            DurationSeconds = 0,
             DataQualityCode = dataQualityCode,
+            AlarmNumber = alarmNumber,
+            AlarmMessage = alarmMessage,
         };
     }
 
@@ -147,6 +161,8 @@ public sealed class LiveDeviceStateStore
             OperationMode = source.OperationMode,
             EmergencyState = source.EmergencyState,
             AlarmState = source.AlarmState,
+            CurrentAlarmNumber = source.CurrentAlarmNumber,
+            CurrentAlarmMessage = source.CurrentAlarmMessage,
             ControllerModeText = source.ControllerModeText,
             OeeStatusText = source.OeeStatusText,
             SpindleSpeedRpm = source.SpindleSpeedRpm,
@@ -170,7 +186,10 @@ public sealed class LiveDeviceStateStore
             StartAt = source.StartAt,
             EndAt = source.EndAt,
             DurationMinutes = source.DurationMinutes,
+            DurationSeconds = source.DurationSeconds,
             DataQualityCode = source.DataQualityCode,
+            AlarmNumber = source.AlarmNumber,
+            AlarmMessage = source.AlarmMessage,
         };
     }
 }

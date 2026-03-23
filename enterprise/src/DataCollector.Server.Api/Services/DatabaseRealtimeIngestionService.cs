@@ -8,27 +8,31 @@ public sealed class DatabaseRealtimeIngestionService : IRealtimeIngestionService
 {
     private readonly IDbContextFactory<EnterpriseDbContext> _dbContextFactory;
     private readonly TimeProvider _timeProvider;
+    private readonly ILogger<DatabaseRealtimeIngestionService> _logger;
 
     public DatabaseRealtimeIngestionService(
         IDbContextFactory<EnterpriseDbContext> dbContextFactory,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ILogger<DatabaseRealtimeIngestionService> logger)
     {
         _dbContextFactory = dbContextFactory;
         _timeProvider = timeProvider;
+        _logger = logger;
     }
 
     public async Task<MachineRealtimeIngestionResultDto> IngestAsync(MachineRealtimeBatchDto batch, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(batch);
 
-        await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await using var lookupContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         var snapshotCodes = batch.Snapshots
             .Select(snapshot => snapshot.DeviceCode.Trim())
             .Where(code => !string.IsNullOrWhiteSpace(code))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var devices = await dbContext.Devices
+        var devices = await lookupContext.Devices
+            .AsNoTracking()
             .Where(device => snapshotCodes.Contains(device.DeviceCode))
             .ToDictionaryAsync(device => device.DeviceCode, StringComparer.OrdinalIgnoreCase, cancellationToken);
 
@@ -63,12 +67,26 @@ public sealed class DatabaseRealtimeIngestionService : IRealtimeIngestionService
                 continue;
             }
 
-            ApplySnapshot(device, snapshot);
-            await UpsertTimelineAsync(dbContext, device.DeviceId, snapshot, cancellationToken);
-            acceptedCount++;
-        }
+            try
+            {
+                await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+                var trackedDevice = await dbContext.Devices.FirstOrDefaultAsync(item => item.DeviceId == device.DeviceId, cancellationToken);
+                if (trackedDevice is null)
+                {
+                    unknownDeviceCodes.Add(deviceCode);
+                    continue;
+                }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+                ApplySnapshot(trackedDevice, snapshot);
+                await UpsertTimelineAsync(dbContext, trackedDevice.DeviceId, snapshot, cancellationToken);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                acceptedCount++;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(exception, "Failed to ingest realtime snapshot for {DeviceCode}", deviceCode);
+            }
+        }
 
         return new MachineRealtimeIngestionResultDto
         {
@@ -82,9 +100,10 @@ public sealed class DatabaseRealtimeIngestionService : IRealtimeIngestionService
 
     private static void ApplySnapshot(DeviceEntity device, MachineRealtimeSnapshotDto snapshot)
     {
+        var normalizedState = NormalizeState(snapshot.CurrentState);
         device.MachineOnline = snapshot.MachineOnline;
-        device.CurrentState = snapshot.CurrentState;
-        device.HealthLevel = snapshot.CurrentState switch
+        device.CurrentState = normalizedState;
+        device.HealthLevel = normalizedState switch
         {
             MachineOperationalState.Alarm or MachineOperationalState.Emergency => DeviceHealthLevel.Critical,
             MachineOperationalState.CommunicationInterrupted => DeviceHealthLevel.Warning,
@@ -99,6 +118,8 @@ public sealed class DatabaseRealtimeIngestionService : IRealtimeIngestionService
         device.AutomaticMode = snapshot.AutomaticMode;
         device.OperationMode = snapshot.OperationMode;
         device.AlarmState = snapshot.AlarmState;
+        device.CurrentAlarmNumber = snapshot.CurrentAlarmNumber;
+        device.CurrentAlarmMessage = snapshot.CurrentAlarmMessage;
         device.EmergencyState = snapshot.EmergencyState;
         device.ControllerModeText = snapshot.ControllerModeText;
         device.OeeStatusText = snapshot.OeeStatusText;
@@ -124,7 +145,7 @@ public sealed class DatabaseRealtimeIngestionService : IRealtimeIngestionService
 
         if (lastSegment is null)
         {
-            dbContext.TimelineSegments.Add(CreateSegment(deviceId, reportDateKey, snapshot.CurrentState, snapshot.CollectedAt, snapshot.DataQualityCode));
+            dbContext.TimelineSegments.Add(CreateSegment(deviceId, reportDateKey, snapshot, NormalizeState(snapshot.CurrentState)));
             return;
         }
 
@@ -133,7 +154,11 @@ public sealed class DatabaseRealtimeIngestionService : IRealtimeIngestionService
             return;
         }
 
-        if (lastSegment.State == snapshot.CurrentState && lastSegment.DataQualityCode == snapshot.DataQualityCode)
+        var normalizedState = NormalizeState(snapshot.CurrentState);
+        if (lastSegment.State == normalizedState &&
+            lastSegment.DataQualityCode == snapshot.DataQualityCode &&
+            lastSegment.AlarmNumber == snapshot.CurrentAlarmNumber &&
+            string.Equals(lastSegment.AlarmMessage, snapshot.CurrentAlarmMessage, StringComparison.Ordinal))
         {
             if (snapshot.CollectedAt > lastSegment.EndAt)
             {
@@ -150,26 +175,28 @@ public sealed class DatabaseRealtimeIngestionService : IRealtimeIngestionService
             lastSegment.DurationMinutes = Math.Round((lastSegment.EndAt - lastSegment.StartAt).TotalMinutes, 2, MidpointRounding.AwayFromZero);
         }
 
-        dbContext.TimelineSegments.Add(CreateSegment(deviceId, reportDateKey, snapshot.CurrentState, snapshot.CollectedAt, snapshot.DataQualityCode));
+        dbContext.TimelineSegments.Add(CreateSegment(deviceId, reportDateKey, snapshot, normalizedState));
     }
 
-    private static TimelineSegmentEntity CreateSegment(
-        Guid deviceId,
-        int reportDateKey,
-        MachineOperationalState state,
-        DateTimeOffset timestamp,
-        string dataQualityCode)
+    private static TimelineSegmentEntity CreateSegment(Guid deviceId, int reportDateKey, MachineRealtimeSnapshotDto snapshot, MachineOperationalState state)
     {
         return new TimelineSegmentEntity
         {
             DeviceId = deviceId,
             ReportDateKey = reportDateKey,
             State = state,
-            StartAt = timestamp,
-            EndAt = timestamp,
+            StartAt = snapshot.CollectedAt,
+            EndAt = snapshot.CollectedAt,
             DurationMinutes = 0,
-            DataQualityCode = dataQualityCode,
+            DataQualityCode = snapshot.DataQualityCode,
+            AlarmNumber = snapshot.CurrentAlarmNumber,
+            AlarmMessage = snapshot.CurrentAlarmMessage,
         };
+    }
+
+    private static MachineOperationalState NormalizeState(MachineOperationalState state)
+    {
+        return state == MachineOperationalState.Waiting ? MachineOperationalState.Standby : state;
     }
 
     private static int ToDateKey(DateOnly date) => (date.Year * 10000) + (date.Month * 100) + date.Day;

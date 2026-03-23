@@ -17,12 +17,12 @@ internal static class DefaultFormulaCatalog
     public const string UtilizationRateCode = "utilization_rate";
     public const string PowerOnRateDisplayName = "开机率";
     public const string UtilizationRateDisplayName = "利用率";
-    public const string PowerOnRateDescription = "默认按开机时间 / 制式工时(小时) * 系数 计算开机率，结果按百分比显示。";
-    public const string UtilizationRateDescription = "默认按选定时间项 / 制式工时(小时) * 系数 计算利用率，结果按百分比显示。";
+    public const string PowerOnRateDescription = "默认按开机时间 / 制式工时(小时) × 系数 计算开机率，界面按百分比显示。";
+    public const string UtilizationRateDescription = "默认按选定时间项 / 制式工时(小时) × 系数 计算利用率，界面按百分比显示。";
     public const string DefaultPowerOnVariable = "开机时间";
     public const string DefaultUtilizationVariable = "加工时间";
     public const double DefaultStandardWorkHours = 10d;
-    public const double DefaultCoefficient = 100d;
+    public const double DefaultCoefficient = 1d;
     public static readonly string PowerOnRateExpression = BuildExpression(DefaultPowerOnVariable, DefaultStandardWorkHours, DefaultCoefficient);
     public static readonly string UtilizationRateExpression = BuildExpression(DefaultUtilizationVariable, DefaultStandardWorkHours, DefaultCoefficient);
 

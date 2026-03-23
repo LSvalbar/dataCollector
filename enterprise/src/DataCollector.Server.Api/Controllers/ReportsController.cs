@@ -16,12 +16,18 @@ public sealed class ReportsController : ControllerBase
     }
 
     [HttpGet("daily")]
-    public async Task<ActionResult<DailyReportResponse>> GetDailyReport([FromQuery] DateOnly? date, CancellationToken cancellationToken)
+    public async Task<ActionResult<DailyReportResponse>> GetDailyReport(
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        [FromQuery] Guid? deviceId,
+        [FromQuery] bool? allDevices,
+        CancellationToken cancellationToken)
     {
-        var reportDate = date ?? DateOnly.FromDateTime(DateTime.Now);
+        var reportDateFrom = from ?? DateOnly.FromDateTime(DateTime.Now);
+        var reportDateTo = to ?? reportDateFrom;
         try
         {
-            return await _platformService.GetDailyReportAsync(reportDate, cancellationToken);
+            return await _platformService.GetDailyReportAsync(reportDateFrom, reportDateTo, deviceId, allDevices ?? false, cancellationToken);
         }
         catch (Exception exception)
         {

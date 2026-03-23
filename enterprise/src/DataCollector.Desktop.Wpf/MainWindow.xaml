@@ -45,11 +45,6 @@
                            HorizontalAlignment="Right"
                            Foreground="{StaticResource TextPrimaryBrush}"
                            Text="服务状态：检测中" />
-                <TextBlock x:Name="ApiBaseUrlTextBlock"
-                           Margin="0,6,0,0"
-                           HorizontalAlignment="Right"
-                           Foreground="{StaticResource TextSecondaryBrush}"
-                           Text="API：" />
                 <TextBlock x:Name="LastOverviewRefreshTextBlock"
                            Margin="0,6,0,0"
                            HorizontalAlignment="Right"
@@ -61,12 +56,12 @@
             </StackPanel>
         </Grid>
 
-        <TabControl x:Name="MainTabControl" Grid.Row="1" Margin="18,8,18,18">
+        <TabControl x:Name="MainTabControl" Grid.Row="1" Margin="18,4,18,18">
             <TabItem x:Name="DeviceManagementTab" Header="设备管理">
-                <Grid Margin="0,10,0,0">
+                <Grid Margin="0,4,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="280" MinWidth="220" />
-                        <ColumnDefinition Width="6" />
+                        <ColumnDefinition Width="5" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
 
@@ -96,10 +91,10 @@
                     </Border>
 
                     <GridSplitter Grid.Column="1"
-                                  Width="6"
+                                  Width="5"
                                   HorizontalAlignment="Stretch"
                                   VerticalAlignment="Stretch"
-                                  Background="#D2D0CE"
+                                  Style="{StaticResource ThinGridSplitterStyle}"
                                   ShowsPreview="True" />
 
                     <Grid Grid.Column="2">
@@ -185,7 +180,7 @@
             </TabItem>
 
             <TabItem Header="统计报表">
-                <Grid Margin="0,14,0,0">
+                <Grid Margin="0,4,0,0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -196,8 +191,22 @@
                     <Border Style="{StaticResource CardBorderStyle}">
                         <DockPanel>
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="统计日期" />
-                                <DatePicker x:Name="ReportDatePicker" Width="148" Margin="12,0,0,0" />
+                                <TextBlock VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="开始日期" />
+                                <DatePicker x:Name="ReportFromDatePicker" Width="138" Margin="12,0,0,0" />
+                                <TextBlock Margin="16,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="结束日期" />
+                                <DatePicker x:Name="ReportToDatePicker" Width="138" Margin="12,0,0,0" />
+                                <CheckBox x:Name="ReportAllDevicesCheckBox"
+                                          Margin="16,0,0,0"
+                                          VerticalAlignment="Center"
+                                          Content="所有设备"
+                                          Checked="ReportAllDevicesCheckBox_Changed"
+                                          Unchecked="ReportAllDevicesCheckBox_Changed" />
+                                <TextBlock Margin="16,0,0,0" VerticalAlignment="Center" Foreground="{StaticResource TextSecondaryBrush}" Text="设备" />
+                                <ComboBox x:Name="ReportDeviceComboBox"
+                                          Width="260"
+                                          Margin="12,0,0,0"
+                                          DisplayMemberPath="DisplayText"
+                                          SelectedValuePath="DeviceId" />
                                 <Button Width="110" Margin="12,0,0,0" Style="{StaticResource PrimaryButtonStyle}" Content="刷新报表" Click="RefreshReportButton_Click" />
                             </StackPanel>
                             <TextBlock x:Name="ReportSummaryTextBlock"
@@ -209,7 +218,7 @@
                         </DockPanel>
                     </Border>
 
-                    <Grid Grid.Row="1" Margin="0,18,0,0">
+                    <Grid Grid.Row="1" Margin="0,10,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="16" />
@@ -265,10 +274,6 @@
                                            Margin="0,12,0,0"
                                            Foreground="{StaticResource TextPrimaryBrush}"
                                            Text="当前公式：-" />
-                                <TextBlock Grid.Row="3"
-                                           Margin="0,40,0,0"
-                                           Foreground="{StaticResource TextSecondaryBrush}"
-                                           Text="当前开机率按 开机时间 / 制式工时(小时) × 系数 自动计算，结果按 % 显示。" />
                             </Grid>
                         </GroupBox>
 
@@ -321,10 +326,6 @@
                                            Margin="0,12,0,0"
                                            Foreground="{StaticResource TextPrimaryBrush}"
                                            Text="当前公式：-" />
-                                <TextBlock Grid.Row="3"
-                                           Margin="0,40,0,0"
-                                           Foreground="{StaticResource TextSecondaryBrush}"
-                                           Text="当前利用率按 时间项 / 制式工时(小时) × 系数 自动计算，结果按 % 显示。" />
                             </Grid>
                         </GroupBox>
                     </Grid>
@@ -336,7 +337,7 @@
                                 Click="ConfigureFormulaButton_Click" />
                     </StackPanel>
 
-                    <Border Grid.Row="3" Margin="0,18,0,0" Style="{StaticResource CardBorderStyle}">
+                    <Border Grid.Row="3" Margin="0,10,0,0" Style="{StaticResource CardBorderStyle}">
                         <DataGrid x:Name="DailyReportGrid">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="车间" Binding="{Binding WorkshopName}" Width="110" />
@@ -345,9 +346,9 @@
                                 <DataGridTextColumn Header="当前状态" Binding="{Binding CurrentStateText}" Width="90" />
                                 <DataGridTextColumn Header="开机时长" Binding="{Binding PowerOnMinutesText}" Width="115" />
                                 <DataGridTextColumn Header="加工时长" Binding="{Binding ProcessingMinutesText}" Width="115" />
-                                <DataGridTextColumn Header="等待时长" Binding="{Binding WaitingMinutesText}" Width="115" />
                                 <DataGridTextColumn Header="待机时长" Binding="{Binding StandbyMinutesText}" Width="115" />
                                 <DataGridTextColumn Header="关机时长" Binding="{Binding PowerOffMinutesText}" Width="115" />
+                                <DataGridTextColumn Header="报警时长" Binding="{Binding AlarmMinutesText}" Width="115" />
                                 <DataGridTextColumn Header="开机率(%)" Binding="{Binding PowerOnRateText}" Width="90" />
                                 <DataGridTextColumn Header="利用率(%)" Binding="{Binding UtilizationRateText}" Width="90" />
                                 <DataGridTextColumn Header="采集质量" Binding="{Binding DataQualityText}" Width="110" />
@@ -358,7 +359,7 @@
             </TabItem>
 
             <TabItem x:Name="TimelineTab" Header="设备运行情况">
-                <Grid Margin="0,14,0,0">
+                <Grid Margin="0,4,0,0">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -379,7 +380,7 @@
                         </StackPanel>
                     </Border>
 
-                    <WrapPanel x:Name="TimelineTotalsPanel" Grid.Row="1" Margin="0,18,0,10" />
+                    <WrapPanel x:Name="TimelineTotalsPanel" Grid.Row="1" Margin="0,10,0,10" />
 
                     <Border Grid.Row="2" Style="{StaticResource CardBorderStyle}">
                         <DataGrid x:Name="TimelineGrid">
@@ -396,6 +397,8 @@
                                 <DataGridTextColumn Header="开始时间" Binding="{Binding StartAtText}" Width="180" />
                                 <DataGridTextColumn Header="截止时间" Binding="{Binding EndAtText}" Width="180" />
                                 <DataGridTextColumn Header="时长" Binding="{Binding DurationSecondsText}" Width="110" />
+                                <DataGridTextColumn Header="报警号" Binding="{Binding AlarmNumberText}" Width="90" />
+                                <DataGridTextColumn Header="报警信息" Binding="{Binding AlarmMessage}" Width="220" />
                                 <DataGridTextColumn Header="采集质量" Binding="{Binding DataQualityText}" Width="140" />
                             </DataGrid.Columns>
                         </DataGrid>
@@ -483,85 +486,6 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="部署说明">
-                <Grid Margin="0,14,0,0">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-
-                    <Border Style="{StaticResource CardBorderStyle}">
-                        <TextBlock FontSize="17"
-                                   FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextPrimaryBrush}"
-                                   Text="客户端、服务端、Agent 的职责划分与部署方式" />
-                    </Border>
-
-                    <Grid Grid.Row="1" Margin="0,18,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="16" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel>
-                            <Border Style="{StaticResource CardBorderStyle}" Margin="0,0,0,16">
-                                <StackPanel>
-                                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="{StaticResource TextPrimaryBrush}" Text="&#xE7F4;" />
-                                    <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="Bold" Text="客户端" />
-                                    <TextBlock Margin="0,8,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                        客户端是给管理者、IT 运维和主管使用的操作界面。主要负责设备管理、报表查看、历史追溯、权限管理和公式配置。
-                                    </TextBlock>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource CardBorderStyle}" Margin="0,0,0,16">
-                                <StackPanel>
-                                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="{StaticResource TextPrimaryBrush}" Text="&#xE7EE;" />
-                                    <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="Bold" Text="服务端" />
-                                    <TextBlock Margin="0,8,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                        服务端放在机房或中心服务器，负责统一接收 Agent 上传的数据，保存设备档案、公式、时间线、权限和报表结果，并把实时状态与历史时间线写入本地数据库。
-                                    </TextBlock>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource CardBorderStyle}">
-                                <StackPanel>
-                                    <TextBlock FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="{StaticResource TextPrimaryBrush}" Text="&#xE83A;" />
-                                    <TextBlock Margin="0,10,0,0" FontSize="16" FontWeight="Bold" Text="Agent" />
-                                    <TextBlock Margin="0,8,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                        Agent 放在车间采集机上，直接连接机床网络。它负责采集 FOCAS 数据，并按当前 Agent 节点自动从服务端拉取设备清单；设备增删改后，不需要再手工改本地 Machines 列表。
-                                    </TextBlock>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-
-                        <Border Grid.Column="2" Style="{StaticResource CardBorderStyle}">
-                            <StackPanel>
-                                <TextBlock FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}" Text="你需要做什么" />
-                                <TextBlock Margin="0,14,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                    1. 在机房准备一台中央服务主机，部署服务端和数据库。
-                                </TextBlock>
-                                <TextBlock Margin="0,10,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                    2. 每个车间至少准备一台可连接机床网络的 Agent 采集机，推荐双网卡。
-                                </TextBlock>
-                                <TextBlock Margin="0,10,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                    3. 在客户端录入部门、车间、设备、IP、端口和 Agent 节点，设备编码必须唯一。
-                                </TextBlock>
-                                <TextBlock Margin="0,10,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                    4. 在 Win10 机器上优先使用统一启动器，填写服务端地址和 Agent 节点；Agent 会自动从服务端下发所属设备。
-                                </TextBlock>
-                                <TextBlock Margin="0,10,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                    5. 如果机床能 ping 通但客户端仍显示离线，优先检查 Agent 是否启动、Agent 节点是否一致、设备是否真的绑定到了这个 Agent 节点、设备是否被禁用。
-                                </TextBlock>
-                                <TextBlock Margin="0,10,0,0" Foreground="{StaticResource TextSecondaryBrush}" TextWrapping="Wrap">
-                                    6. 报表中的开机率、利用率公式由管理口径决定，可以在统计报表页直接维护。
-                                </TextBlock>
-                            </StackPanel>
-                        </Border>
-                    </Grid>
-                </Grid>
-            </TabItem>
         </TabControl>
     </Grid>
 </Window>

@@ -37,6 +37,8 @@ using (var scope = app.Services.CreateScope())
 
 app.MapOpenApi();
 app.UseCors("desktop-client");
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseAuthorization();
 app.MapGet(
     "/healthz",

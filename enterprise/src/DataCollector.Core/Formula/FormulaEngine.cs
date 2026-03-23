@@ -78,7 +78,7 @@ public sealed class FormulaEngine
         {
             ["开机时间"] = metrics.PowerOnMinutes,
             ["加工时间"] = metrics.ProcessingMinutes,
-            ["等待时间"] = metrics.WaitingMinutes,
+            ["等待时间"] = metrics.WaitingMinutes + metrics.StandbyMinutes,
             ["待机时间"] = metrics.StandbyMinutes,
             ["关机时间"] = metrics.PowerOffMinutes,
             ["报警时间"] = metrics.AlarmMinutes,

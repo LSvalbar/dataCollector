@@ -16,7 +16,12 @@ public interface IEnterprisePlatformService
 
     Task RenameDeviceAsync(Guid deviceId, string newName, CancellationToken cancellationToken);
 
-    Task<DailyReportResponse> GetDailyReportAsync(DateOnly reportDate, CancellationToken cancellationToken);
+    Task<DailyReportResponse> GetDailyReportAsync(
+        DateOnly reportDateFrom,
+        DateOnly reportDateTo,
+        Guid? deviceId,
+        bool includeAllDevices,
+        CancellationToken cancellationToken);
 
     Task<IReadOnlyList<FormulaDefinitionDto>> GetFormulasAsync(CancellationToken cancellationToken);
 

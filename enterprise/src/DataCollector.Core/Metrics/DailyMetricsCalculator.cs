@@ -21,7 +21,7 @@ public sealed class DailyMetricsCalculator
                     break;
                 case MachineOperationalState.Waiting:
                     snapshot.PowerOnMinutes += segment.DurationMinutes;
-                    snapshot.WaitingMinutes += segment.DurationMinutes;
+                    snapshot.StandbyMinutes += segment.DurationMinutes;
                     break;
                 case MachineOperationalState.Standby:
                     snapshot.PowerOnMinutes += segment.DurationMinutes;

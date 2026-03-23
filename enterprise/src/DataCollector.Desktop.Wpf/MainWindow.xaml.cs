@@ -17,7 +17,7 @@ public partial class MainWindow : Window
     private List<DeviceDto> _devices = [];
     private string _treeSignature = string.Empty;
     private ScopeNodeType _selectedScopeType = ScopeNodeType.All;
-    private string _selectedScopeKey = "ALL";
+    private HashSet<string> _selectedScopeKeys = new(StringComparer.OrdinalIgnoreCase) { "ALL" };
     private bool _autoRefreshInProgress;
     private DeviceStatusWindow? _deviceStatusWindow;
     private OrganizationTreeNode? _treeContextNode;
@@ -33,16 +33,17 @@ public partial class MainWindow : Window
         "待机时间",
         "关机时间",
     };
-    private FormulaSelection _powerOnFormulaSelection = new("开机时间", 10d, 100d);
-    private FormulaSelection _utilizationFormulaSelection = new("加工时间", 10d, 100d);
+    private FormulaSelection _powerOnFormulaSelection = new("开机时间", 10d, 1d);
+    private FormulaSelection _utilizationFormulaSelection = new("加工时间", 10d, 1d);
 
     public MainWindow()
     {
         InitializeComponent();
         WindowLayoutHelper.EnableResponsiveSizing(this, maximizeWhenConstrained: true);
-        ReportDatePicker.SelectedDate = DateTime.Today;
+        ReportFromDatePicker.SelectedDate = DateTime.Today;
+        ReportToDatePicker.SelectedDate = DateTime.Today;
+        ReportAllDevicesCheckBox.IsChecked = true;
         TimelineDatePicker.SelectedDate = DateTime.Today;
-        ApiBaseUrlTextBlock.Text = $"API：{_apiClient.BaseAddress}";
 
         _autoRefreshTimer = new DispatcherTimer
         {
@@ -159,8 +160,16 @@ public partial class MainWindow : Window
     {
         try
         {
-            var reportDate = DateOnly.FromDateTime(ReportDatePicker.SelectedDate ?? DateTime.Today);
-            var response = await _apiClient.GetDailyReportAsync(reportDate);
+            var reportDateFrom = DateOnly.FromDateTime(ReportFromDatePicker.SelectedDate ?? DateTime.Today);
+            var reportDateTo = DateOnly.FromDateTime(ReportToDatePicker.SelectedDate ?? reportDateFrom.ToDateTime(TimeOnly.MinValue));
+            var includeAllDevices = ReportAllDevicesCheckBox.IsChecked == true;
+            Guid? selectedDeviceId = includeAllDevices ? null : ReportDeviceComboBox.SelectedValue as Guid?;
+            if (!includeAllDevices && selectedDeviceId is null && ReportDeviceComboBox.SelectedValue is Guid comboDeviceId)
+            {
+                selectedDeviceId = comboDeviceId;
+            }
+
+            var response = await _apiClient.GetDailyReportAsync(reportDateFrom, reportDateTo, selectedDeviceId, includeAllDevices);
             if (response is null)
             {
                 return;
@@ -175,7 +184,12 @@ public partial class MainWindow : Window
             _utilizationFormulaSelection = ParseFormulaSelection(utilizationFormula, "加工时间");
             _formulaVisibleOptions = BuildVisibleOptionSet(powerOnFormula, utilizationFormula);
             BindFormulaSelections();
-            ReportSummaryTextBlock.Text = $"日报快照：{response.SnapshotAt:yyyy-MM-dd HH:mm:ss}";
+            var scopeText = response.IncludeAllDevices
+                ? $"全部设备，共 {response.Rows.Count} 台"
+                : response.Rows.FirstOrDefault() is { } firstRow
+                    ? $"{firstRow.DeviceCode} / {firstRow.DeviceName}"
+                    : "未选择设备";
+            ReportSummaryTextBlock.Text = $"统计区间：{response.ReportDateFrom:yyyy-MM-dd} 至 {response.ReportDateTo:yyyy-MM-dd} | {scopeText} | 快照 {response.SnapshotAt:yyyy-MM-dd HH:mm:ss}";
             DailyReportGrid.ItemsSource = response.Rows.Select(ToReportGridRow).ToList();
         }
         catch (Exception exception)
@@ -209,7 +223,9 @@ public partial class MainWindow : Window
                 StateText = segment.State.ToDisplayName(),
                 StartAtText = segment.StartAt.ToString("yyyy-MM-dd HH:mm:ss"),
                 EndAtText = segment.EndAt.ToString("yyyy-MM-dd HH:mm:ss"),
-                DurationSecondsText = DurationDisplayFormatter.FormatFromSeconds(segment.DurationSeconds),
+                DurationSecondsText = $"{Math.Max(0, segment.DurationSeconds)} 秒",
+                AlarmNumberText = segment.AlarmNumber?.ToString() ?? "-",
+                AlarmMessage = string.IsNullOrWhiteSpace(segment.AlarmMessage) ? "-" : segment.AlarmMessage,
                 DataQualityText = TranslateDataQuality(segment.DataQualityCode),
                 StateBackground = GetStateBackground(segment.State),
                 StateForeground = GetStateForeground(segment.State),
@@ -279,29 +295,32 @@ public partial class MainWindow : Window
 
         _treeSignature = newSignature;
         DeviceTreeView.ItemsSource = _devices
-            .GroupBy(device => new { device.DepartmentCode, device.DepartmentName })
-            .OrderBy(group => group.Key.DepartmentCode)
+            .GroupBy(device => device.DepartmentName.Trim(), StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
             .Select(departmentGroup => new OrganizationTreeNode
             {
                 NodeType = ScopeNodeType.Department,
-                ScopeKey = departmentGroup.Key.DepartmentCode,
-                Title = $"{departmentGroup.Key.DepartmentName} ({departmentGroup.Count()})",
-                Subtitle = $"{departmentGroup.Key.DepartmentCode} | {departmentGroup.Count()} 台机床",
+                ScopeKey = departmentGroup.Select(device => device.DepartmentCode).FirstOrDefault() ?? departmentGroup.Key,
+                ScopeKeys = departmentGroup.Select(device => device.DepartmentCode).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                Title = $"{departmentGroup.Key} ({departmentGroup.Count()})",
+                Subtitle = $"{string.Join("、", departmentGroup.Select(device => device.DepartmentCode).Distinct(StringComparer.OrdinalIgnoreCase).Take(3))} | {departmentGroup.Count()} 台机床",
                 Children = departmentGroup
-                    .GroupBy(device => new { device.WorkshopCode, device.WorkshopName })
-                    .OrderBy(group => group.Key.WorkshopCode)
+                    .GroupBy(device => device.WorkshopName.Trim(), StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
                     .Select(workshopGroup => new OrganizationTreeNode
                     {
                         NodeType = ScopeNodeType.Workshop,
-                        ScopeKey = workshopGroup.Key.WorkshopCode,
-                        Title = $"{workshopGroup.Key.WorkshopName} ({workshopGroup.Count()})",
-                        Subtitle = $"{workshopGroup.Key.WorkshopCode} | {workshopGroup.Count()} 台机床",
+                        ScopeKey = workshopGroup.Select(device => device.WorkshopCode).FirstOrDefault() ?? workshopGroup.Key,
+                        ScopeKeys = workshopGroup.Select(device => device.WorkshopCode).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+                        Title = $"{workshopGroup.Key} ({workshopGroup.Count()})",
+                        Subtitle = $"{string.Join("、", workshopGroup.Select(device => device.WorkshopCode).Distinct(StringComparer.OrdinalIgnoreCase).Take(3))} | {workshopGroup.Count()} 台机床",
                         Children = workshopGroup
                             .OrderBy(device => device.DeviceCode)
                             .Select(device => new OrganizationTreeNode
                             {
                                 NodeType = ScopeNodeType.Device,
                                 ScopeKey = device.DeviceId.ToString(),
+                                ScopeKeys = [device.DeviceId.ToString()],
                                 DeviceId = device.DeviceId,
                                 Title = $"{device.DeviceCode} - {device.DeviceName}",
                                 Subtitle = $"{device.ControllerModel} | {device.IpAddress}:{device.Port}",
@@ -338,8 +357,7 @@ public partial class MainWindow : Window
         {
             CreateMetricCard("设备总数", devices.Count.ToString(), "当前范围"),
             CreateMetricCard("加工中", devices.Count(device => device.CurrentState == MachineOperationalState.Processing).ToString(), "绿色"),
-            CreateMetricCard("等待中", devices.Count(device => device.CurrentState == MachineOperationalState.Waiting).ToString(), "黄色"),
-            CreateMetricCard("待机", devices.Count(device => device.CurrentState == MachineOperationalState.Standby).ToString(), "黄色"),
+            CreateMetricCard("待机", devices.Count(device => device.CurrentState is MachineOperationalState.Waiting or MachineOperationalState.Standby).ToString(), "黄色"),
             CreateMetricCard("关机", devices.Count(device => device.CurrentState == MachineOperationalState.PowerOff).ToString(), "灰色"),
             CreateMetricCard("异常", devices.Count(device => device.CurrentState is MachineOperationalState.Alarm or MachineOperationalState.Emergency or MachineOperationalState.CommunicationInterrupted).ToString(), "红色"),
         };
@@ -459,6 +477,7 @@ public partial class MainWindow : Window
     private void RefreshTimelineDeviceList()
     {
         var selectedDeviceId = TimelineDeviceComboBox.SelectedValue is Guid deviceId ? deviceId : (Guid?)null;
+        var selectedReportDeviceId = ReportDeviceComboBox.SelectedValue is Guid reportDeviceId ? reportDeviceId : (Guid?)null;
         var items = _devices
             .OrderBy(device => device.WorkshopCode)
             .ThenBy(device => device.DeviceCode)
@@ -478,6 +497,18 @@ public partial class MainWindow : Window
         {
             TimelineDeviceComboBox.SelectedIndex = items.Count > 0 ? 0 : -1;
         }
+
+        ReportDeviceComboBox.ItemsSource = items;
+        if (selectedReportDeviceId.HasValue && items.Any(item => item.DeviceId == selectedReportDeviceId.Value))
+        {
+            ReportDeviceComboBox.SelectedValue = selectedReportDeviceId.Value;
+        }
+        else
+        {
+            ReportDeviceComboBox.SelectedIndex = items.Count > 0 ? 0 : -1;
+        }
+
+        ReportDeviceComboBox.IsEnabled = ReportAllDevicesCheckBox.IsChecked != true;
     }
 
     private IReadOnlyList<DeviceDto> GetFilteredDevices()
@@ -489,9 +520,9 @@ public partial class MainWindow : Window
     {
         return _selectedScopeType switch
         {
-            ScopeNodeType.Department => device.DepartmentCode == _selectedScopeKey,
-            ScopeNodeType.Workshop => device.WorkshopCode == _selectedScopeKey,
-            ScopeNodeType.Device => device.DeviceId.ToString() == _selectedScopeKey,
+            ScopeNodeType.Department => _selectedScopeKeys.Contains(device.DepartmentCode),
+            ScopeNodeType.Workshop => _selectedScopeKeys.Contains(device.WorkshopCode),
+            ScopeNodeType.Device => _selectedScopeKeys.Contains(device.DeviceId.ToString()),
             _ => true,
         };
     }
@@ -544,10 +575,10 @@ public partial class MainWindow : Window
     {
         var visibleOptions = GetVisibleFormulaOptions();
 
-        PowerOnMetricComboBox.ItemsSource = _formulaOptions.Where(option => option.VariableName == "开机时间").ToList();
+        PowerOnMetricComboBox.ItemsSource = visibleOptions;
         UtilizationMetricComboBox.ItemsSource = visibleOptions;
 
-        PowerOnMetricComboBox.SelectedValue = "开机时间";
+        PowerOnMetricComboBox.SelectedValue = _powerOnFormulaSelection.PrimaryVariable;
         UtilizationMetricComboBox.SelectedValue = _utilizationFormulaSelection.PrimaryVariable;
 
         PowerOnStandardHoursTextBlock.Text = $"{_powerOnFormulaSelection.StandardWorkHours:0.##} 小时";
@@ -588,7 +619,7 @@ public partial class MainWindow : Window
             return new FormulaSelection(formula.PrimaryVariable, formula.StandardWorkHours, formula.Coefficient);
         }
 
-        return new FormulaSelection(defaultVariable, 10d, 100d);
+        return new FormulaSelection(defaultVariable, 10d, 1d);
     }
 
     private static string BuildFormulaExpression(FormulaSelection selection)
@@ -663,7 +694,7 @@ public partial class MainWindow : Window
         var currentName = _treeContextNode.NodeType switch
         {
             ScopeNodeType.Device => ResolveDeviceName(_treeContextNode.DeviceId),
-            _ => _treeContextNode.Title,
+            _ => ResolveNodeDisplayName(_treeContextNode.Title),
         };
 
         var window = new RenameNodeWindow(currentName, ResolveRenameTitle(_treeContextNode.NodeType)) { Owner = this };
@@ -677,10 +708,16 @@ public partial class MainWindow : Window
             switch (_treeContextNode.NodeType)
             {
                 case ScopeNodeType.Department:
-                    await _apiClient.RenameDepartmentAsync(_treeContextNode.ScopeKey, window.NodeName);
+                    foreach (var departmentCode in _treeContextNode.ScopeKeys)
+                    {
+                        await _apiClient.RenameDepartmentAsync(departmentCode, window.NodeName);
+                    }
                     break;
                 case ScopeNodeType.Workshop:
-                    await _apiClient.RenameWorkshopAsync(_treeContextNode.ScopeKey, window.NodeName);
+                    foreach (var workshopCode in _treeContextNode.ScopeKeys)
+                    {
+                        await _apiClient.RenameWorkshopAsync(workshopCode, window.NodeName);
+                    }
                     break;
                 case ScopeNodeType.Device when _treeContextNode.DeviceId.HasValue:
                     await _apiClient.RenameDeviceAsync(_treeContextNode.DeviceId.Value, window.NodeName);
@@ -714,6 +751,12 @@ public partial class MainWindow : Window
         }
 
         return _devices.FirstOrDefault(device => device.DeviceId == deviceId.Value)?.DeviceName ?? string.Empty;
+    }
+
+    private static string ResolveNodeDisplayName(string title)
+    {
+        var suffixIndex = title.LastIndexOf(" (", StringComparison.Ordinal);
+        return suffixIndex > 0 ? title[..suffixIndex] : title;
     }
 
     private DeviceUpsertRequest BuildDefaultRequest()
@@ -760,7 +803,7 @@ public partial class MainWindow : Window
 
         if (sourceNode.NodeType == ScopeNodeType.Workshop)
         {
-            var device = _devices.FirstOrDefault(item => item.WorkshopCode == sourceNode.ScopeKey);
+            var device = _devices.FirstOrDefault(item => sourceNode.ScopeKeys.Contains(item.WorkshopCode, StringComparer.OrdinalIgnoreCase));
             if (device is not null)
             {
                 request.DepartmentCode = device.DepartmentCode;
@@ -776,9 +819,9 @@ public partial class MainWindow : Window
 
         if (sourceNode.NodeType == ScopeNodeType.Department)
         {
-            var device = _devices.FirstOrDefault(item => item.DepartmentCode == sourceNode.ScopeKey);
+            var device = _devices.FirstOrDefault(item => sourceNode.ScopeKeys.Contains(item.DepartmentCode, StringComparer.OrdinalIgnoreCase));
             request.DepartmentCode = device?.DepartmentCode ?? sourceNode.ScopeKey;
-            request.DepartmentName = device?.DepartmentName ?? sourceNode.Title;
+            request.DepartmentName = device?.DepartmentName ?? ResolveNodeDisplayName(sourceNode.Title);
         }
 
         return request;
@@ -1000,11 +1043,11 @@ public partial class MainWindow : Window
             CurrentStateText = row.CurrentState.ToDisplayName(),
             PowerOnMinutesText = DurationDisplayFormatter.FormatFromMinutes(row.PowerOnMinutes),
             ProcessingMinutesText = DurationDisplayFormatter.FormatFromMinutes(row.ProcessingMinutes),
-            WaitingMinutesText = DurationDisplayFormatter.FormatFromMinutes(row.WaitingMinutes),
             StandbyMinutesText = DurationDisplayFormatter.FormatFromMinutes(row.StandbyMinutes),
             PowerOffMinutesText = DurationDisplayFormatter.FormatFromMinutes(row.PowerOffMinutes),
-            PowerOnRateText = $"{row.PowerOnRate.ToString("F2", CultureInfo.InvariantCulture)}%",
-            UtilizationRateText = $"{row.UtilizationRate.ToString("F2", CultureInfo.InvariantCulture)}%",
+            AlarmMinutesText = DurationDisplayFormatter.FormatFromMinutes(row.AlarmMinutes),
+            PowerOnRateText = $"{(row.PowerOnRate * 100d).ToString("F2", CultureInfo.InvariantCulture)}%",
+            UtilizationRateText = $"{(row.UtilizationRate * 100d).ToString("F2", CultureInfo.InvariantCulture)}%",
             DataQualityText = TranslateDataQuality(row.DataQualityCode),
         };
     }
@@ -1072,6 +1115,11 @@ public partial class MainWindow : Window
     private async void RefreshReportButton_Click(object sender, RoutedEventArgs e) => await RefreshReportAsync(true);
 
     private async void RefreshTimelineButton_Click(object sender, RoutedEventArgs e) => await RefreshTimelineAsync(true);
+
+    private void ReportAllDevicesCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        ReportDeviceComboBox.IsEnabled = ReportAllDevicesCheckBox.IsChecked != true;
+    }
 
     private async void ConfigureFormulaButton_Click(object sender, RoutedEventArgs e)
     {
@@ -1381,13 +1429,13 @@ public partial class MainWindow : Window
         if (e.NewValue is not OrganizationTreeNode node)
         {
             _selectedScopeType = ScopeNodeType.All;
-            _selectedScopeKey = "ALL";
+            _selectedScopeKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "ALL" };
             _treeContextNode = null;
         }
         else
         {
             _selectedScopeType = node.NodeType;
-            _selectedScopeKey = node.ScopeKey;
+            _selectedScopeKeys = new HashSet<string>(node.ScopeKeys, StringComparer.OrdinalIgnoreCase);
             _treeContextNode = node;
         }
 
@@ -1461,9 +1509,9 @@ public partial class MainWindow : Window
         public required string CurrentStateText { get; init; }
         public required string PowerOnMinutesText { get; init; }
         public required string ProcessingMinutesText { get; init; }
-        public required string WaitingMinutesText { get; init; }
         public required string StandbyMinutesText { get; init; }
         public required string PowerOffMinutesText { get; init; }
+        public required string AlarmMinutesText { get; init; }
         public required string PowerOnRateText { get; init; }
         public required string UtilizationRateText { get; init; }
         public required string DataQualityText { get; init; }
@@ -1475,6 +1523,8 @@ public partial class MainWindow : Window
         public required string StartAtText { get; init; }
         public required string EndAtText { get; init; }
         public required string DurationSecondsText { get; init; }
+        public required string AlarmNumberText { get; init; }
+        public required string AlarmMessage { get; init; }
         public required string DataQualityText { get; init; }
         public required Brush StateBackground { get; init; }
         public required Brush StateForeground { get; init; }
@@ -1519,6 +1569,8 @@ public sealed class OrganizationTreeNode
     public ScopeNodeType NodeType { get; init; }
 
     public required string ScopeKey { get; init; }
+
+    public IReadOnlyList<string> ScopeKeys { get; init; } = [];
 
     public Guid? DeviceId { get; init; }
 

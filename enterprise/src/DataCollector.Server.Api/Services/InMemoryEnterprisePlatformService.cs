@@ -213,12 +213,22 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
         return Task.CompletedTask;
     }
 
-    public Task<DailyReportResponse> GetDailyReportAsync(DateOnly reportDate, CancellationToken cancellationToken)
+    public Task<DailyReportResponse> GetDailyReportAsync(
+        DateOnly reportDateFrom,
+        DateOnly reportDateTo,
+        Guid? deviceId,
+        bool includeAllDevices,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
         var now = _timeProvider.GetLocalNow();
-        var devices = BuildDeviceSnapshots(now);
+        IReadOnlyList<DeviceDto> devices = BuildDeviceSnapshots(now);
+        if (!includeAllDevices && deviceId.HasValue)
+        {
+            devices = devices.Where(device => device.DeviceId == deviceId.Value).ToArray();
+        }
+
         var formulas = _formulas.Values
             .OrderBy(formula => formula.Code, StringComparer.OrdinalIgnoreCase)
             .Select(CloneFormula)
@@ -232,9 +242,9 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
             .ThenBy(device => device.DeviceCode, StringComparer.OrdinalIgnoreCase)
             .Select(device =>
             {
-                var timeline = _liveDeviceStateStore.HasTimeline(device.DeviceCode, reportDate)
-                    ? _liveDeviceStateStore.GetTimeline(device.DeviceCode, reportDate, now)
-                    : BuildFallbackTimeline(device, reportDate, now);
+                var timeline = _liveDeviceStateStore.HasTimeline(device.DeviceCode, reportDateTo)
+                    ? _liveDeviceStateStore.GetTimeline(device.DeviceCode, reportDateTo, now)
+                    : BuildFallbackTimeline(device, reportDateTo, now);
 
                 var metrics = _dailyMetricsCalculator.Calculate(timeline);
                 var variables = _formulaEngine.BuildVariableMap(metrics);
@@ -245,7 +255,9 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                     WorkshopName = device.WorkshopName,
                     DeviceCode = device.DeviceCode,
                     DeviceName = device.DeviceName,
-                    ReportDate = reportDate,
+                    ReportDate = reportDateFrom,
+                    ReportDateFrom = reportDateFrom,
+                    ReportDateTo = reportDateTo,
                     PowerOnMinutes = metrics.PowerOnMinutes,
                     ProcessingMinutes = metrics.ProcessingMinutes,
                     WaitingMinutes = metrics.WaitingMinutes,
@@ -257,7 +269,7 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
                     PowerOnRate = _formulaEngine.Evaluate(powerOnFormula.Expression, variables),
                     UtilizationRate = _formulaEngine.Evaluate(utilizationFormula.Expression, variables),
                     CurrentState = device.CurrentState,
-                    DataQualityCode = _liveDeviceStateStore.HasTimeline(device.DeviceCode, reportDate)
+                    DataQualityCode = _liveDeviceStateStore.HasTimeline(device.DeviceCode, reportDateTo)
                         ? "realtime_session"
                         : "not_collected",
                 };
@@ -266,7 +278,10 @@ public sealed class InMemoryEnterprisePlatformService : IEnterprisePlatformServi
 
         return Task.FromResult(new DailyReportResponse
         {
-            ReportDate = reportDate,
+            ReportDateFrom = reportDateFrom,
+            ReportDateTo = reportDateTo,
+            IncludeAllDevices = includeAllDevices,
+            SelectedDeviceId = includeAllDevices ? null : deviceId,
             Formulas = formulas,
             Rows = rows,
             SnapshotAt = now,

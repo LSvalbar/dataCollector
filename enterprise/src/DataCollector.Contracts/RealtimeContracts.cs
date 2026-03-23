@@ -18,6 +18,10 @@ public sealed class MachineRealtimeSnapshotDto
 
     public bool AlarmState { get; set; }
 
+    public int? CurrentAlarmNumber { get; set; }
+
+    public string? CurrentAlarmMessage { get; set; }
+
     public string? ControllerModeText { get; set; }
 
     public string? OeeStatusText { get; set; }

@@ -79,6 +79,10 @@ public sealed class DeviceDto
 
     public bool AlarmState { get; set; }
 
+    public int? CurrentAlarmNumber { get; set; }
+
+    public string? CurrentAlarmMessage { get; set; }
+
     public bool EmergencyState { get; set; }
 
     public string? ControllerModeText { get; set; }

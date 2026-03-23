@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>机加数采 API 文档</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 32px;
+            font-family: "Microsoft YaHei UI", "Segoe UI", sans-serif;
+            background: #f3f2f1;
+            color: #201f1e;
+        }
+
+        h1, h2 {
+            margin: 0 0 12px;
+        }
+
+        section {
+            margin: 0 0 20px;
+            padding: 20px 22px;
+            background: #fff;
+            border: 1px solid #d2d0ce;
+        }
+
+        code, pre {
+            font-family: Consolas, "Courier New", monospace;
+            background: #f8f8f8;
+        }
+
+        code {
+            padding: 2px 4px;
+        }
+
+        pre {
+            padding: 12px;
+            overflow: auto;
+            border: 1px solid #e1dfdd;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 10px 12px;
+            border: 1px solid #e1dfdd;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            background: #f3f2f1;
+        }
+    </style>
+</head>
+<body>
+    <section>
+        <h1>机加数采 API 文档</h1>
+        <p>这份静态文档用于说明当前正式版客户端、服务端、Agent 之间的主要接口。默认部署后可通过 <code>/api/</code> 目录访问。</p>
+    </section>
+
+    <section>
+        <h2>接口概览</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>模块</th>
+                    <th>方法</th>
+                    <th>路径</th>
+                    <th>作用</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>健康检查</td>
+                    <td>GET</td>
+                    <td><code>/healthz</code></td>
+                    <td>检查服务端是否在线。</td>
+                </tr>
+                <tr>
+                    <td>设备管理</td>
+                    <td>GET</td>
+                    <td><code>/api/device-management/overview</code></td>
+                    <td>查询设备树、设备列表和当前实时状态。</td>
+                </tr>
+                <tr>
+                    <td>设备管理</td>
+                    <td>POST / PUT / DELETE</td>
+                    <td><code>/api/device-management/devices</code></td>
+                    <td>新增、修改、删除设备档案。</td>
+                </tr>
+                <tr>
+                    <td>报表</td>
+                    <td>GET</td>
+                    <td><code>/api/reports/daily?from=2026-01-01&amp;to=2026-02-01&amp;allDevices=true</code></td>
+                    <td>查询区间统计报表，支持单设备或全部设备。</td>
+                </tr>
+                <tr>
+                    <td>报表</td>
+                    <td>GET / PUT</td>
+                    <td><code>/api/reports/formulas</code></td>
+                    <td>读取和维护开机率、利用率等公式。</td>
+                </tr>
+                <tr>
+                    <td>时间线</td>
+                    <td>GET</td>
+                    <td><code>/api/timeline/devices/{deviceId}?date=2026-03-23</code></td>
+                    <td>查询某台设备某天的运行时间线。</td>
+                </tr>
+                <tr>
+                    <td>安全</td>
+                    <td>GET / POST / DELETE</td>
+                    <td><code>/api/security/*</code></td>
+                    <td>读取用户、角色、权限并执行维护。</td>
+                </tr>
+                <tr>
+                    <td>Agent</td>
+                    <td>GET</td>
+                    <td><code>/api/agent/runtime-config/{agentNodeName}</code></td>
+                    <td>Agent 拉取所属设备配置。</td>
+                </tr>
+                <tr>
+                    <td>采集接入</td>
+                    <td>POST</td>
+                    <td><code>/api/ingestion/snapshots</code></td>
+                    <td>Agent 上传机床实时快照。</td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section>
+        <h2>典型调用</h2>
+        <pre>GET /api/reports/daily?from=2026-03-01&amp;to=2026-03-23&amp;allDevices=false&amp;deviceId=设备GUID</pre>
+        <pre>GET /api/agent/runtime-config/W01-Agent</pre>
+        <pre>POST /api/ingestion/snapshots</pre>
+    </section>
+</body>
+</html>

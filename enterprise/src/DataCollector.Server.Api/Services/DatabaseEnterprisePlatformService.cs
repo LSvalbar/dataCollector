@@ -52,8 +52,8 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
                 WorkshopName = group.Key.WorkshopName,
                 MachineCount = group.Count(),
                 ProcessingCount = group.Count(device => device.CurrentState == MachineOperationalState.Processing),
-                WaitingCount = group.Count(device => device.CurrentState == MachineOperationalState.Waiting),
-                StandbyCount = group.Count(device => device.CurrentState == MachineOperationalState.Standby),
+                WaitingCount = 0,
+                StandbyCount = group.Count(device => device.CurrentState is MachineOperationalState.Waiting or MachineOperationalState.Standby),
                 AlarmCount = group.Count(device => device.CurrentState == MachineOperationalState.Alarm),
                 EmergencyCount = group.Count(device => device.CurrentState == MachineOperationalState.Emergency),
                 PowerOffCount = group.Count(device => device.CurrentState == MachineOperationalState.PowerOff),
@@ -198,13 +198,33 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<DailyReportResponse> GetDailyReportAsync(DateOnly reportDate, CancellationToken cancellationToken)
+    public async Task<DailyReportResponse> GetDailyReportAsync(
+        DateOnly reportDateFrom,
+        DateOnly reportDateTo,
+        Guid? deviceId,
+        bool includeAllDevices,
+        CancellationToken cancellationToken)
     {
+        if (reportDateTo < reportDateFrom)
+        {
+            throw new InvalidOperationException("结束日期不能早于开始日期。");
+        }
+
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
         var now = _timeProvider.GetLocalNow();
-        var reportDateKey = ToDateKey(reportDate);
-        var devices = await dbContext.Devices
+        var reportDateKeyFrom = ToDateKey(reportDateFrom);
+        var reportDateKeyTo = ToDateKey(reportDateTo);
+
+        var deviceQuery = dbContext.Devices
             .AsNoTracking()
+            .AsQueryable();
+
+        if (!includeAllDevices && deviceId.HasValue)
+        {
+            deviceQuery = deviceQuery.Where(device => device.DeviceId == deviceId.Value);
+        }
+
+        var devices = await deviceQuery
             .OrderBy(device => device.DepartmentCode)
             .ThenBy(device => device.WorkshopCode)
             .ThenBy(device => device.DeviceCode)
@@ -212,7 +232,8 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
         var formulas = await EnsureRequiredFormulasAsync(dbContext, cancellationToken);
         var timelineSegments = await dbContext.TimelineSegments
             .AsNoTracking()
-            .Where(segment => segment.ReportDateKey == reportDateKey)
+            .Where(segment => segment.ReportDateKey >= reportDateKeyFrom && segment.ReportDateKey <= reportDateKeyTo)
+            .Where(segment => includeAllDevices || !deviceId.HasValue || segment.DeviceId == deviceId.Value)
             .ToListAsync(cancellationToken);
         var groupedSegments = timelineSegments
             .GroupBy(segment => segment.DeviceId)
@@ -226,8 +247,8 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
         {
             var runtimeDevice = ToDeviceDto(device, now);
             var segments = groupedSegments.TryGetValue(device.DeviceId, out var foundSegments)
-                ? ToTimelineDtos(foundSegments, reportDate, now)
-                : BuildFallbackTimeline(runtimeDevice, reportDate, now);
+                ? ToTimelineDtos(foundSegments, reportDateTo, now)
+                : [];
 
             var metrics = _dailyMetricsCalculator.Calculate(segments);
             var variables = _formulaEngine.BuildVariableMap(metrics);
@@ -237,7 +258,9 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
                 WorkshopName = runtimeDevice.WorkshopName,
                 DeviceCode = runtimeDevice.DeviceCode,
                 DeviceName = runtimeDevice.DeviceName,
-                ReportDate = reportDate,
+                ReportDate = reportDateFrom,
+                ReportDateFrom = reportDateFrom,
+                ReportDateTo = reportDateTo,
                 PowerOnMinutes = metrics.PowerOnMinutes,
                 ProcessingMinutes = metrics.ProcessingMinutes,
                 WaitingMinutes = metrics.WaitingMinutes,
@@ -255,7 +278,10 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
 
         return new DailyReportResponse
         {
-            ReportDate = reportDate,
+            ReportDateFrom = reportDateFrom,
+            ReportDateTo = reportDateTo,
+            IncludeAllDevices = includeAllDevices,
+            SelectedDeviceId = includeAllDevices ? null : deviceId,
             Formulas = formulas.Select(ToFormulaDto).ToArray(),
             Rows = rows,
             SnapshotAt = now,
@@ -353,9 +379,7 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             throw new InvalidOperationException("公式输入有误，请查看列名是否相同。");
         }
 
-        var primaryVariable = normalizedCode == DefaultFormulaCatalog.PowerOnRateCode
-            ? DefaultFormulaCatalog.DefaultPowerOnVariable
-            : request.PrimaryVariable?.Trim();
+        var primaryVariable = request.PrimaryVariable?.Trim();
 
         if (string.IsNullOrWhiteSpace(primaryVariable))
         {
@@ -422,7 +446,6 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             {
                 ["开机时间"] = metrics.PowerOnMinutes,
                 ["加工时间"] = metrics.ProcessingMinutes,
-                ["等待时间"] = metrics.WaitingMinutes,
                 ["待机时间"] = metrics.StandbyMinutes,
                 ["关机时间"] = metrics.PowerOffMinutes,
                 ["报警时间"] = metrics.AlarmMinutes,
@@ -647,7 +670,7 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
     private DeviceDto ToDeviceDto(DeviceEntity source, DateTimeOffset now)
     {
         var machineOnline = source.MachineOnline;
-        var currentState = source.CurrentState;
+        var currentState = NormalizeState(source.CurrentState);
         var healthLevel = source.HealthLevel;
         var dataQualityCode = source.DataQualityCode;
         var errorMessage = source.LastCollectionError;
@@ -704,6 +727,8 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             AutomaticMode = source.AutomaticMode,
             OperationMode = source.OperationMode,
             AlarmState = source.AlarmState,
+            CurrentAlarmNumber = source.CurrentAlarmNumber,
+            CurrentAlarmMessage = source.CurrentAlarmMessage,
             EmergencyState = source.EmergencyState,
             ControllerModeText = source.ControllerModeText,
             OeeStatusText = source.OeeStatusText,
@@ -716,18 +741,17 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
         };
     }
 
+    private static MachineOperationalState NormalizeState(MachineOperationalState state)
+    {
+        return state == MachineOperationalState.Waiting ? MachineOperationalState.Standby : state;
+    }
+
     private bool TryNormalizeFormula(FormulaEntity formula)
     {
         var changed = false;
         var parsed = TryParseFormulaSelection(formula.Expression);
 
-        if (formula.Code == DefaultFormulaCatalog.PowerOnRateCode &&
-            !formula.PrimaryVariable.Equals(DefaultFormulaCatalog.DefaultPowerOnVariable, StringComparison.OrdinalIgnoreCase))
-        {
-            formula.PrimaryVariable = DefaultFormulaCatalog.DefaultPowerOnVariable;
-            changed = true;
-        }
-        else if (string.IsNullOrWhiteSpace(formula.PrimaryVariable))
+        if (string.IsNullOrWhiteSpace(formula.PrimaryVariable))
         {
             formula.PrimaryVariable = parsed?.PrimaryVariable
                 ?? (formula.Code == DefaultFormulaCatalog.UtilizationRateCode
@@ -747,9 +771,9 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             formula.Coefficient = parsed?.Coefficient ?? DefaultFormulaCatalog.DefaultCoefficient;
             changed = true;
         }
-        else if (formula.Coefficient == 1d && !string.Equals(formula.ResultUnit, "%", StringComparison.Ordinal))
+        else if (formula.Coefficient > 5d)
         {
-            formula.Coefficient = DefaultFormulaCatalog.DefaultCoefficient;
+            formula.Coefficient = Math.Round(formula.Coefficient / 100d, 4, MidpointRounding.AwayFromZero);
             changed = true;
         }
 
@@ -919,12 +943,14 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
             .OrderBy(segment => segment.StartAt.UtcDateTime)
             .Select(segment => new TimelineSegmentDto
             {
-                State = segment.State,
+                State = NormalizeState(segment.State),
                 StartAt = segment.StartAt,
                 EndAt = segment.EndAt,
                 DurationMinutes = segment.DurationMinutes,
                 DurationSeconds = (int)Math.Max(0, Math.Round(segment.DurationMinutes * 60d, MidpointRounding.AwayFromZero)),
                 DataQualityCode = segment.DataQualityCode,
+                AlarmNumber = segment.AlarmNumber,
+                AlarmMessage = segment.AlarmMessage,
             })
             .ToList();
 
@@ -966,6 +992,8 @@ public sealed class DatabaseEnterprisePlatformService : IEnterprisePlatformServi
                 DurationMinutes = Math.Round((endAt - startAt).TotalMinutes, 2, MidpointRounding.AwayFromZero),
                 DurationSeconds = (int)Math.Max(0, Math.Round((endAt - startAt).TotalSeconds, MidpointRounding.AwayFromZero)),
                 DataQualityCode = quality,
+                AlarmNumber = device.CurrentAlarmNumber,
+                AlarmMessage = device.CurrentAlarmMessage,
             },
         ];
     }

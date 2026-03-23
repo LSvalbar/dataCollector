@@ -45,6 +45,7 @@ public sealed class EnterpriseDbContext : DbContext
             entity.Property(item => item.ResponsiblePerson).HasMaxLength(128);
             entity.Property(item => item.CurrentProgramNo).HasMaxLength(64);
             entity.Property(item => item.CurrentProgramName).HasMaxLength(256);
+            entity.Property(item => item.CurrentAlarmMessage).HasMaxLength(1024);
             entity.Property(item => item.ControllerModeText).HasMaxLength(64);
             entity.Property(item => item.OeeStatusText).HasMaxLength(64);
             entity.Property(item => item.DataQualityCode).HasMaxLength(64);
@@ -118,6 +119,7 @@ public sealed class EnterpriseDbContext : DbContext
             entity.HasKey(item => item.TimelineSegmentId);
             entity.HasIndex(item => new { item.DeviceId, item.ReportDateKey, item.StartAt });
             entity.Property(item => item.DataQualityCode).HasMaxLength(64);
+            entity.Property(item => item.AlarmMessage).HasMaxLength(1024);
             entity.HasOne(item => item.Device)
                 .WithMany(item => item.TimelineSegments)
                 .HasForeignKey(item => item.DeviceId)
@@ -181,6 +183,10 @@ public sealed class DeviceEntity
     public int OperationMode { get; set; }
 
     public bool AlarmState { get; set; }
+
+    public int? CurrentAlarmNumber { get; set; }
+
+    public string? CurrentAlarmMessage { get; set; }
 
     public bool EmergencyState { get; set; }
 
@@ -297,4 +303,8 @@ public sealed class TimelineSegmentEntity
     public double DurationMinutes { get; set; }
 
     public string DataQualityCode { get; set; } = "native_preferred";
+
+    public int? AlarmNumber { get; set; }
+
+    public string? AlarmMessage { get; set; }
 }
