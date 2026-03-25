@@ -7,7 +7,7 @@ public partial class UserEditorWindow : Window
 {
     private readonly List<SelectableOption> _roleOptions;
 
-    public UserEditorWindow(IEnumerable<RoleDto> availableRoles, UserDto? user = null)
+    public UserEditorWindow(IEnumerable<RoleDto> availableRoles, UserDto? user = null, string? defaultDepartment = null)
     {
         InitializeComponent();
         WindowLayoutHelper.EnableResponsiveSizing(this, 0.78, 0.88);
@@ -25,7 +25,7 @@ public partial class UserEditorWindow : Window
         UserCodeTextBox.Text = user?.UserCode ?? string.Empty;
         UserNameTextBox.Text = user?.UserName ?? string.Empty;
         DisplayNameTextBox.Text = user?.DisplayName ?? string.Empty;
-        DepartmentTextBox.Text = user?.Department ?? string.Empty;
+        DepartmentTextBox.Text = user?.Department ?? defaultDepartment ?? string.Empty;
         EnabledCheckBox.IsChecked = user?.IsEnabled ?? true;
 
         if (user is not null)

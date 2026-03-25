@@ -22,9 +22,12 @@ public partial class MainWindow : Window
     private DeviceStatusWindow? _deviceStatusWindow;
     private OrganizationTreeNode? _treeContextNode;
     private SecurityOverviewDto? _securityOverview;
+    private SecurityTreeNode? _selectedSecurityTreeNode;
+    private SecurityTreeNode? _securityTreeContextNode;
     private Guid? _deviceGridContextDeviceId;
     private string? _userGridContextCode;
     private string? _roleGridContextCode;
+    private string _securityTreeSignature = string.Empty;
     private List<FormulaVariableOptionDto> _formulaOptions = [];
     private HashSet<string> _formulaVisibleOptions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -218,11 +221,15 @@ public partial class MainWindow : Window
             }
 
             DrawTimelineTotals(timeline.DailyTotals);
+            TimelineGrid.ItemsSource = BuildTimelineRows(timeline.Segments);
+            if (Environment.TickCount == int.MinValue)
             TimelineGrid.ItemsSource = timeline.Segments.Select(segment => new TimelineGridRow
             {
                 StateText = segment.State.ToDisplayName(),
                 StartAtText = segment.StartAt.ToString("yyyy-MM-dd HH:mm:ss"),
                 EndAtText = segment.EndAt.ToString("yyyy-MM-dd HH:mm:ss"),
+                PowerOnAtText = "-",
+                PowerOffAtText = "-",
                 ProgramNoText = string.IsNullOrWhiteSpace(segment.ProgramNo) ? "-" : segment.ProgramNo,
                 DrawingNumberText = string.IsNullOrWhiteSpace(segment.DrawingNumber) ? "-" : segment.DrawingNumber,
                 DurationSecondsText = $"{Math.Max(0, segment.DurationSeconds)} 秒",
@@ -253,6 +260,10 @@ public partial class MainWindow : Window
             }
 
             _securityOverview = security;
+            EnsureSecurityTreeStructure();
+            ApplySecurityScopeToView();
+            if (Environment.TickCount == int.MinValue)
+            {
             UsersGrid.ItemsSource = security.Users.Select(user => new UserGridRow
             {
                 UserCode = user.UserCode,
@@ -273,6 +284,7 @@ public partial class MainWindow : Window
             }).ToList();
 
             PermissionsGrid.ItemsSource = security.Permissions.ToList();
+            }
         }
         catch (Exception exception)
         {
@@ -281,6 +293,234 @@ public partial class MainWindow : Window
                 MessageBox.Show(this, exception.Message, "权限刷新失败", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+    }
+
+    private List<TimelineGridRow> BuildTimelineRows(IReadOnlyList<TimelineSegmentDto> segments)
+    {
+        var orderedSegments = segments
+            .OrderBy(segment => segment.StartAt)
+            .ToList();
+        var rows = new List<TimelineGridRow>(orderedSegments.Count);
+        TimelineSegmentDto? previousSegment = null;
+
+        foreach (var segment in orderedSegments)
+        {
+            var isStartOfDayBoundary = previousSegment is null && segment.StartAt.TimeOfDay == TimeSpan.Zero;
+            var isPowerOnTransition = segment.State != MachineOperationalState.PowerOff &&
+                                      !isStartOfDayBoundary &&
+                                      (previousSegment is null || previousSegment.State == MachineOperationalState.PowerOff);
+            var isPowerOffTransition = segment.State == MachineOperationalState.PowerOff &&
+                                       !isStartOfDayBoundary &&
+                                       (previousSegment is null || previousSegment.State != MachineOperationalState.PowerOff);
+
+            rows.Add(new TimelineGridRow
+            {
+                StateText = segment.State.ToDisplayName(),
+                StartAtText = segment.StartAt.ToString("yyyy-MM-dd HH:mm:ss"),
+                EndAtText = segment.EndAt.ToString("yyyy-MM-dd HH:mm:ss"),
+                PowerOnAtText = isPowerOnTransition ? segment.StartAt.ToString("yyyy-MM-dd HH:mm:ss") : "-",
+                PowerOffAtText = isPowerOffTransition ? segment.StartAt.ToString("yyyy-MM-dd HH:mm:ss") : "-",
+                ProgramNoText = string.IsNullOrWhiteSpace(segment.ProgramNo) ? "-" : segment.ProgramNo,
+                DrawingNumberText = string.IsNullOrWhiteSpace(segment.DrawingNumber) ? "-" : segment.DrawingNumber,
+                DurationSecondsText = $"{Math.Max(0, segment.DurationSeconds)} 秒",
+                AlarmNumberText = segment.AlarmNumber?.ToString() ?? "-",
+                AlarmMessage = string.IsNullOrWhiteSpace(segment.AlarmMessage) ? "-" : segment.AlarmMessage,
+                DataQualityText = TranslateDataQuality(segment.DataQualityCode),
+                StateBackground = GetStateBackground(segment.State),
+                StateForeground = GetStateForeground(segment.State),
+            });
+
+            previousSegment = segment;
+        }
+
+        return rows;
+    }
+
+    private void EnsureSecurityTreeStructure()
+    {
+        if (_securityOverview is null)
+        {
+            SecurityTreeView.ItemsSource = null;
+            return;
+        }
+
+        var signature = string.Join(
+            "|",
+            _securityOverview.Users
+                .OrderBy(user => user.Department, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(user => user.UserCode, StringComparer.OrdinalIgnoreCase)
+                .Select(user => $"U:{user.Department}:{user.UserCode}:{user.UserName}:{user.DisplayName}"));
+        signature += "||" + string.Join(
+            "|",
+            _securityOverview.Roles
+                .OrderBy(role => role.RoleCode, StringComparer.OrdinalIgnoreCase)
+                .Select(role => $"R:{role.RoleCode}:{role.RoleName}:{role.Description}"));
+
+        if (signature == _securityTreeSignature)
+        {
+            return;
+        }
+
+        _securityTreeSignature = signature;
+        var userRoot = new SecurityTreeNode
+        {
+            NodeType = SecurityTreeNodeType.UsersRoot,
+            NodeKey = "users-root",
+            Title = $"用户 ({_securityOverview.Users.Count})",
+            Subtitle = "按部门查看用户",
+            Children = _securityOverview.Users
+                .GroupBy(user => string.IsNullOrWhiteSpace(user.Department) ? "未分配部门" : user.Department.Trim(), StringComparer.OrdinalIgnoreCase)
+                .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(group => new SecurityTreeNode
+                {
+                    NodeType = SecurityTreeNodeType.Department,
+                    NodeKey = $"department:{group.Key}",
+                    Title = $"{group.Key} ({group.Count()})",
+                    Subtitle = $"共 {group.Count()} 个用户",
+                    DepartmentName = group.Key,
+                    Children = group
+                        .OrderBy(user => user.UserName, StringComparer.OrdinalIgnoreCase)
+                        .Select(user => new SecurityTreeNode
+                        {
+                            NodeType = SecurityTreeNodeType.User,
+                            NodeKey = $"user:{user.UserCode}",
+                            Title = $"{user.UserName} - {user.DisplayName}",
+                            Subtitle = string.Join(" / ", user.RoleCodes),
+                            DepartmentName = user.Department,
+                            UserCode = user.UserCode,
+                        })
+                        .ToList(),
+                })
+                .ToList(),
+        };
+
+        var roleRoot = new SecurityTreeNode
+        {
+            NodeType = SecurityTreeNodeType.RolesRoot,
+            NodeKey = "roles-root",
+            Title = $"角色 ({_securityOverview.Roles.Count})",
+            Subtitle = "查看角色与权限",
+            Children = _securityOverview.Roles
+                .OrderBy(role => role.RoleCode, StringComparer.OrdinalIgnoreCase)
+                .Select(role => new SecurityTreeNode
+                {
+                    NodeType = SecurityTreeNodeType.Role,
+                    NodeKey = $"role:{role.RoleCode}",
+                    Title = $"{role.RoleCode} - {role.RoleName}",
+                    Subtitle = role.Description,
+                    RoleCode = role.RoleCode,
+                })
+                .ToList(),
+        };
+
+        var nodes = new List<SecurityTreeNode> { userRoot, roleRoot };
+        SecurityTreeView.ItemsSource = nodes;
+        _selectedSecurityTreeNode = TryFindSecurityNode(nodes, _selectedSecurityTreeNode?.NodeKey) ?? userRoot;
+    }
+
+    private void ApplySecurityScopeToView()
+    {
+        if (_securityOverview is null)
+        {
+            UsersGrid.ItemsSource = null;
+            RolesGrid.ItemsSource = null;
+            PermissionsGrid.ItemsSource = null;
+            return;
+        }
+
+        var selectedNode = _selectedSecurityTreeNode;
+        IReadOnlyList<UserDto> users = _securityOverview.Users;
+        IReadOnlyList<RoleDto> roles = _securityOverview.Roles;
+        IReadOnlyList<PermissionDto> permissions = _securityOverview.Permissions;
+        var summary = $"用户 {_securityOverview.Users.Count} 个，角色 {_securityOverview.Roles.Count} 个";
+
+        switch (selectedNode?.NodeType)
+        {
+            case SecurityTreeNodeType.Department:
+                users = _securityOverview.Users
+                    .Where(user => string.Equals(
+                        string.IsNullOrWhiteSpace(user.Department) ? "未分配部门" : user.Department.Trim(),
+                        selectedNode.DepartmentName,
+                        StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                roles = _securityOverview.Roles
+                    .Where(role => users.Any(user => user.RoleCodes.Contains(role.RoleCode, StringComparer.OrdinalIgnoreCase)))
+                    .ToArray();
+                permissions = roles.SelectMany(role => role.Permissions)
+                    .GroupBy(permission => permission.PermissionCode, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => group.First())
+                    .OrderBy(permission => permission.PermissionCode, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                summary = $"部门：{selectedNode.DepartmentName}，用户 {users.Count} 个";
+                break;
+            case SecurityTreeNodeType.User:
+                var selectedUser = _securityOverview.Users.FirstOrDefault(user =>
+                    string.Equals(user.UserCode, selectedNode.UserCode, StringComparison.OrdinalIgnoreCase));
+                if (selectedUser is not null)
+                {
+                    users = [selectedUser];
+                    roles = _securityOverview.Roles
+                        .Where(role => selectedUser.RoleCodes.Contains(role.RoleCode, StringComparer.OrdinalIgnoreCase))
+                        .ToArray();
+                    permissions = roles.SelectMany(role => role.Permissions)
+                        .GroupBy(permission => permission.PermissionCode, StringComparer.OrdinalIgnoreCase)
+                        .Select(group => group.First())
+                        .OrderBy(permission => permission.PermissionCode, StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                    summary = $"用户：{selectedUser.UserName} / {selectedUser.DisplayName}";
+                }
+                break;
+            case SecurityTreeNodeType.Role:
+                var selectedRole = _securityOverview.Roles.FirstOrDefault(role =>
+                    string.Equals(role.RoleCode, selectedNode.RoleCode, StringComparison.OrdinalIgnoreCase));
+                if (selectedRole is not null)
+                {
+                    roles = [selectedRole];
+                    users = _securityOverview.Users
+                        .Where(user => user.RoleCodes.Contains(selectedRole.RoleCode, StringComparer.OrdinalIgnoreCase))
+                        .ToArray();
+                    permissions = selectedRole.Permissions
+                        .OrderBy(permission => permission.PermissionCode, StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                    summary = $"角色：{selectedRole.RoleCode} / {selectedRole.RoleName}";
+                }
+                break;
+            case SecurityTreeNodeType.RolesRoot:
+                summary = $"全部角色 {_securityOverview.Roles.Count} 个";
+                break;
+            default:
+                summary = $"全部用户 {_securityOverview.Users.Count} 个，全部角色 {_securityOverview.Roles.Count} 个";
+                break;
+        }
+
+        SecurityScopeSummaryTextBlock.Text = summary;
+        UsersGrid.ItemsSource = users.Select(ToUserGridRow).ToList();
+        RolesGrid.ItemsSource = roles.Select(ToRoleGridRow).ToList();
+        PermissionsGrid.ItemsSource = permissions.ToList();
+    }
+
+    private static SecurityTreeNode? TryFindSecurityNode(IEnumerable<SecurityTreeNode> nodes, string? nodeKey)
+    {
+        if (string.IsNullOrWhiteSpace(nodeKey))
+        {
+            return null;
+        }
+
+        foreach (var node in nodes)
+        {
+            if (string.Equals(node.NodeKey, nodeKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return node;
+            }
+
+            var match = TryFindSecurityNode(node.Children, nodeKey);
+            if (match is not null)
+            {
+                return match;
+            }
+        }
+
+        return null;
     }
 
     private void EnsureTreeStructure()
@@ -877,6 +1117,11 @@ public partial class MainWindow : Window
             return _securityOverview.Users.FirstOrDefault(user => user.UserCode == _userGridContextCode);
         }
 
+        if (!string.IsNullOrWhiteSpace(_selectedSecurityTreeNode?.UserCode))
+        {
+            return _securityOverview.Users.FirstOrDefault(user => user.UserCode == _selectedSecurityTreeNode.UserCode);
+        }
+
         return null;
     }
 
@@ -897,10 +1142,15 @@ public partial class MainWindow : Window
             return _securityOverview.Roles.FirstOrDefault(role => role.RoleCode == _roleGridContextCode);
         }
 
+        if (!string.IsNullOrWhiteSpace(_selectedSecurityTreeNode?.RoleCode))
+        {
+            return _securityOverview.Roles.FirstOrDefault(role => role.RoleCode == _selectedSecurityTreeNode.RoleCode);
+        }
+
         return null;
     }
 
-    private async Task OpenUserEditorAsync(UserDto? user = null)
+    private async Task OpenUserEditorAsync(UserDto? user = null, string? defaultDepartment = null)
     {
         if (_securityOverview is null)
         {
@@ -912,7 +1162,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new UserEditorWindow(_securityOverview.Roles, user) { Owner = this };
+        var window = new UserEditorWindow(_securityOverview.Roles, user, defaultDepartment) { Owner = this };
         if (window.ShowDialog() != true || window.Request is null)
         {
             return;
@@ -956,6 +1206,31 @@ public partial class MainWindow : Window
         {
             MessageBox.Show(this, exception.Message, "角色保存失败", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private static UserGridRow ToUserGridRow(UserDto user)
+    {
+        return new UserGridRow
+        {
+            UserCode = user.UserCode,
+            UserName = user.UserName,
+            DisplayName = user.DisplayName,
+            Department = user.Department,
+            RoleCodesText = string.Join(" / ", user.RoleCodes),
+            EnabledText = user.IsEnabled ? "启用" : "停用",
+            LastLoginAtText = user.LastLoginAt.ToString("yyyy-MM-dd HH:mm:ss"),
+        };
+    }
+
+    private static RoleGridRow ToRoleGridRow(RoleDto role)
+    {
+        return new RoleGridRow
+        {
+            RoleCode = role.RoleCode,
+            RoleName = role.RoleName,
+            Description = role.Description,
+            PermissionCount = role.Permissions.Count,
+        };
     }
 
     private DeviceDto? GetSelectedDevice()
@@ -1264,6 +1539,108 @@ public partial class MainWindow : Window
         await RefreshSecurityAsync(true);
     }
 
+    private void SecurityTreeView_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var source = e.OriginalSource as DependencyObject;
+        var treeViewItem = FindAncestor<TreeViewItem>(source);
+        if (treeViewItem?.DataContext is SecurityTreeNode node)
+        {
+            treeViewItem.IsSelected = true;
+            _securityTreeContextNode = node;
+            return;
+        }
+
+        _securityTreeContextNode = null;
+    }
+
+    private void SecurityTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        _selectedSecurityTreeNode = e.NewValue as SecurityTreeNode;
+        ApplySecurityScopeToView();
+    }
+
+    private void SecurityTreeContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        var node = _securityTreeContextNode ?? _selectedSecurityTreeNode;
+        var canAddUser = node is null || node.NodeType is SecurityTreeNodeType.UsersRoot or SecurityTreeNodeType.Department or SecurityTreeNodeType.User;
+        var canAddRole = node is null || node.NodeType is SecurityTreeNodeType.RolesRoot or SecurityTreeNodeType.Role;
+        var canEdit = node?.NodeType is SecurityTreeNodeType.User or SecurityTreeNodeType.Role;
+        var canDelete = canEdit;
+
+        AddSecurityUserMenuItem.IsEnabled = canAddUser;
+        AddSecurityRoleMenuItem.IsEnabled = canAddRole;
+        EditSecurityNodeMenuItem.IsEnabled = canEdit;
+        DeleteSecurityNodeMenuItem.IsEnabled = canDelete;
+    }
+
+    private async void SecurityAddUserMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        await OpenUserEditorAsync(defaultDepartment: ResolveSecurityDefaultDepartment(_securityTreeContextNode ?? _selectedSecurityTreeNode));
+    }
+
+    private async void SecurityAddRoleMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        await OpenRoleEditorAsync();
+    }
+
+    private async void SecurityEditMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var node = _securityTreeContextNode ?? _selectedSecurityTreeNode;
+        if (node?.NodeType == SecurityTreeNodeType.User)
+        {
+            var user = GetSelectedUser();
+            if (user is not null)
+            {
+                await OpenUserEditorAsync(user);
+            }
+
+            return;
+        }
+
+        if (node?.NodeType == SecurityTreeNodeType.Role)
+        {
+            var role = GetSelectedRole();
+            if (role is not null)
+            {
+                await OpenRoleEditorAsync(role);
+            }
+        }
+    }
+
+    private async void SecurityDeleteMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var node = _securityTreeContextNode ?? _selectedSecurityTreeNode;
+        if (node?.NodeType == SecurityTreeNodeType.User)
+        {
+            var user = GetSelectedUser();
+            if (user is not null)
+            {
+                await DeleteUserAsync(user);
+            }
+
+            return;
+        }
+
+        if (node?.NodeType == SecurityTreeNodeType.Role)
+        {
+            var role = GetSelectedRole();
+            if (role is not null)
+            {
+                await DeleteRoleAsync(role);
+            }
+        }
+    }
+
+    private static string? ResolveSecurityDefaultDepartment(SecurityTreeNode? node)
+    {
+        return node?.NodeType switch
+        {
+            SecurityTreeNodeType.Department => node.DepartmentName,
+            SecurityTreeNodeType.User => node.DepartmentName,
+            _ => null,
+        };
+    }
+
     private void UsersGrid_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         var row = FindAncestor<DataGridRow>(e.OriginalSource as DependencyObject);
@@ -1311,20 +1688,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (MessageBox.Show(this, $"确定删除用户 {user.UserName} 吗？", "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
-        {
-            return;
-        }
-
-        try
-        {
-            await _apiClient.DeleteUserAsync(user.UserCode);
-            await RefreshSecurityAsync(true);
-        }
-        catch (Exception exception)
-        {
-            MessageBox.Show(this, exception.Message, "删除用户失败", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
+        await DeleteUserAsync(user);
     }
 
     private void RolesGrid_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -1374,6 +1738,29 @@ public partial class MainWindow : Window
             return;
         }
 
+        await DeleteRoleAsync(role);
+    }
+
+    private async Task DeleteUserAsync(UserDto user)
+    {
+        if (MessageBox.Show(this, $"确定删除用户 {user.UserName} 吗？", "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            await _apiClient.DeleteUserAsync(user.UserCode);
+            await RefreshSecurityAsync(true);
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(this, exception.Message, "删除用户失败", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task DeleteRoleAsync(RoleDto role)
+    {
         if (MessageBox.Show(this, $"确定删除角色 {role.RoleName} 吗？", "确认删除", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
         {
             return;
@@ -1526,6 +1913,8 @@ public partial class MainWindow : Window
         public required string StateText { get; init; }
         public required string StartAtText { get; init; }
         public required string EndAtText { get; init; }
+        public required string PowerOnAtText { get; init; }
+        public required string PowerOffAtText { get; init; }
         public required string ProgramNoText { get; init; }
         public required string DrawingNumberText { get; init; }
         public required string DurationSecondsText { get; init; }
@@ -1585,4 +1974,32 @@ public sealed class OrganizationTreeNode
     public required string Subtitle { get; init; }
 
     public List<OrganizationTreeNode> Children { get; init; } = [];
+}
+
+public enum SecurityTreeNodeType
+{
+    UsersRoot = 0,
+    Department = 1,
+    User = 2,
+    RolesRoot = 3,
+    Role = 4,
+}
+
+public sealed class SecurityTreeNode
+{
+    public SecurityTreeNodeType NodeType { get; init; }
+
+    public required string NodeKey { get; init; }
+
+    public required string Title { get; init; }
+
+    public required string Subtitle { get; init; }
+
+    public string? DepartmentName { get; init; }
+
+    public string? UserCode { get; init; }
+
+    public string? RoleCode { get; init; }
+
+    public List<SecurityTreeNode> Children { get; init; } = [];
 }
