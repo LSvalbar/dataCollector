@@ -8,7 +8,9 @@ public sealed class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
     private readonly AgentOptions _options;
+    private readonly object _sessionGate = new();
     private readonly Dictionary<string, FanucMachineSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Task> _activeCollectTasks = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _configurationGate = new(1, 1);
     private RealtimeIngestionClient? _ingestionClient;
     private AgentConfigurationClient? _configurationClient;
@@ -39,70 +41,50 @@ public sealed class Worker : BackgroundService
         {
             await RefreshRuntimeConfigurationAsync(force: false, stoppingToken);
 
-            var sessions = _sessions.Values.ToList();
+            List<FanucMachineSession> sessions;
+            lock (_sessionGate)
+            {
+                sessions = _sessions.Values.ToList();
+            }
+
             if (sessions.Count == 0)
             {
                 continue;
             }
 
-            var snapshots = new List<MachineRealtimeSnapshotDto>(sessions.Count);
             foreach (var session in sessions)
             {
-                var snapshot = session.Collect();
-                if (snapshot is not null)
+                var deviceCode = session.Endpoint.DeviceCode;
+                lock (_sessionGate)
                 {
-                    snapshots.Add(snapshot);
+                    if (_activeCollectTasks.TryGetValue(deviceCode, out var activeTask) && !activeTask.IsCompleted)
+                    {
+                        continue;
+                    }
+
+                    var collectTask = RunCollectAndPushAsync(session, stoppingToken);
+                    _activeCollectTasks[deviceCode] = collectTask;
+                    _ = collectTask.ContinueWith(
+                        completedTask => CleanupCollectTask(deviceCode, completedTask),
+                        CancellationToken.None,
+                        TaskContinuationOptions.ExecuteSynchronously,
+                        TaskScheduler.Default);
                 }
-            }
-
-            if (snapshots.Count == 0)
-            {
-                continue;
-            }
-
-            try
-            {
-                var result = await _ingestionClient.PushAsync(snapshots, stoppingToken);
-                _logger.LogDebug(
-                    "Pushed realtime snapshots to {UploadEndpoint}, accepted {Accepted}/{Count}, processed at {ProcessedAt}",
-                    _options.GetUploadEndpoint(),
-                    result.AcceptedSnapshots,
-                    snapshots.Count,
-                    result.ProcessedAt);
-
-                if (result.UnknownDeviceCodes.Count > 0)
-                {
-                    _logger.LogWarning(
-                        "以下设备编码在服务端不存在，已忽略：{DeviceCodes}。请检查客户端设备编码和 Agent 配置是否一致。",
-                        string.Join(", ", result.UnknownDeviceCodes));
-                }
-
-                if (result.AgentNodeMismatchDeviceCodes.Count > 0)
-                {
-                    _logger.LogWarning(
-                        "以下设备编码的 Agent 节点不匹配，已忽略：{DeviceCodes}。请检查服务端设备档案中的 Agent 节点和当前 AgentNodeName 是否一致。",
-                        string.Join(", ", result.AgentNodeMismatchDeviceCodes));
-                }
-
-                if (result.DisabledDeviceCodes.Count > 0)
-                {
-                    _logger.LogWarning(
-                        "以下设备在服务端被禁用，实时快照未入库：{DeviceCodes}。",
-                        string.Join(", ", result.DisabledDeviceCodes));
-                }
-            }
-            catch (Exception exception)
-            {
-                _logger.LogWarning(exception, "Push realtime snapshots failed");
             }
         }
     }
 
     public override void Dispose()
     {
-        foreach (var session in _sessions.Values)
+        List<string> deviceCodes;
+        lock (_sessionGate)
         {
-            session.Dispose();
+            deviceCodes = _sessions.Keys.ToList();
+        }
+
+        foreach (var deviceCode in deviceCodes)
+        {
+            ScheduleSessionDisposal(deviceCode);
         }
 
         _configurationGate.Dispose();
@@ -131,7 +113,13 @@ public sealed class Worker : BackgroundService
             var configuration = await TryLoadRuntimeConfigurationAsync(cancellationToken);
             ApplyRuntimeConfiguration(configuration.Machines);
 
-            if (_sessions.Count == 0)
+            var sessionCount = 0;
+            lock (_sessionGate)
+            {
+                sessionCount = _sessions.Count;
+            }
+
+            if (sessionCount == 0)
             {
                 _logger.LogWarning("Agent 当前没有启用任何机床配置，请先在客户端为节点 {AgentNodeName} 绑定设备。", _options.AgentNodeName);
             }
@@ -180,37 +168,193 @@ public sealed class Worker : BackgroundService
             .Select(group => group.First())
             .ToDictionary(machine => machine.DeviceCode, StringComparer.OrdinalIgnoreCase);
 
-        foreach (var existingCode in _sessions.Keys.ToList())
+        List<string> existingCodes;
+        lock (_sessionGate)
+        {
+            existingCodes = _sessions.Keys.ToList();
+        }
+
+        foreach (var existingCode in existingCodes)
         {
             if (machineMap.ContainsKey(existingCode))
             {
                 continue;
             }
 
-            _sessions[existingCode].Dispose();
-            _sessions.Remove(existingCode);
+            ScheduleSessionDisposal(existingCode);
             _logger.LogInformation("Removed runtime session for {DeviceCode}", existingCode);
         }
 
         foreach (var machine in machineMap.Values)
         {
-            if (_sessions.TryGetValue(machine.DeviceCode, out var existingSession))
+            FanucMachineSession? existingSession;
+            lock (_sessionGate)
+            {
+                _sessions.TryGetValue(machine.DeviceCode, out existingSession);
+            }
+
+            if (existingSession is not null)
             {
                 if (!NeedsRecreate(existingSession.Endpoint, machine))
                 {
                     continue;
                 }
 
-                existingSession.Dispose();
-                _sessions.Remove(machine.DeviceCode);
+                ScheduleSessionDisposal(machine.DeviceCode);
             }
 
             var options = ToEndpointOptions(machine);
-            _sessions[machine.DeviceCode] = new FanucMachineSession(
+            var session = new FanucMachineSession(
                 options,
                 _logger,
                 TimeSpan.FromSeconds(Math.Max(_options.TransientFailureToleranceSeconds, 0)));
+
+            lock (_sessionGate)
+            {
+                _sessions[machine.DeviceCode] = session;
+            }
+
             _logger.LogInformation("Configured runtime session for {DeviceCode} -> {IpAddress}:{Port}", machine.DeviceCode, machine.IpAddress, machine.Port);
+        }
+    }
+
+    private async Task RunCollectAndPushAsync(FanucMachineSession session, CancellationToken stoppingToken)
+    {
+        var deviceCode = session.Endpoint.DeviceCode;
+
+        try
+        {
+            var snapshot = await Task.Run(session.Collect, stoppingToken);
+            if (snapshot is null)
+            {
+                return;
+            }
+
+            FanucMachineSession? currentSession;
+            lock (_sessionGate)
+            {
+                _sessions.TryGetValue(deviceCode, out currentSession);
+            }
+
+            if (!ReferenceEquals(currentSession, session))
+            {
+                _logger.LogDebug("Skip pushing snapshot for {DeviceCode} because runtime session changed", deviceCode);
+                return;
+            }
+
+            await PushSnapshotsAsync([snapshot], stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Collect pipeline failed for {DeviceCode}", deviceCode);
+        }
+    }
+
+    private async Task PushSnapshotsAsync(IReadOnlyList<MachineRealtimeSnapshotDto> snapshots, CancellationToken stoppingToken)
+    {
+        if (snapshots.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await _ingestionClient!.PushAsync(snapshots, stoppingToken);
+            _logger.LogDebug(
+                "Pushed realtime snapshots to {UploadEndpoint}, accepted {Accepted}/{Count}, processed at {ProcessedAt}",
+                _options.GetUploadEndpoint(),
+                result.AcceptedSnapshots,
+                snapshots.Count,
+                result.ProcessedAt);
+
+            if (result.UnknownDeviceCodes.Count > 0)
+            {
+                _logger.LogWarning(
+                    "以下设备编码在服务端不存在，已忽略：{DeviceCodes}。请检查客户端设备编码和 Agent 配置是否一致。",
+                    string.Join(", ", result.UnknownDeviceCodes));
+            }
+
+            if (result.AgentNodeMismatchDeviceCodes.Count > 0)
+            {
+                _logger.LogWarning(
+                    "以下设备编码的 Agent 节点不匹配，已忽略：{DeviceCodes}。请检查服务端设备档案中的 Agent 节点和当前 AgentNodeName 是否一致。",
+                    string.Join(", ", result.AgentNodeMismatchDeviceCodes));
+            }
+
+            if (result.DisabledDeviceCodes.Count > 0)
+            {
+                _logger.LogWarning(
+                    "以下设备在服务端被禁用，实时快照未入库：{DeviceCodes}。",
+                    string.Join(", ", result.DisabledDeviceCodes));
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Push realtime snapshots failed");
+        }
+    }
+
+    private void CleanupCollectTask(string deviceCode, Task completedTask)
+    {
+        lock (_sessionGate)
+        {
+            if (_activeCollectTasks.TryGetValue(deviceCode, out var activeTask) && ReferenceEquals(activeTask, completedTask))
+            {
+                _activeCollectTasks.Remove(deviceCode);
+            }
+        }
+    }
+
+    private void ScheduleSessionDisposal(string deviceCode)
+    {
+        FanucMachineSession? session = null;
+        Task? activeTask = null;
+        lock (_sessionGate)
+        {
+            if (_sessions.TryGetValue(deviceCode, out session))
+            {
+                _sessions.Remove(deviceCode);
+            }
+
+            if (_activeCollectTasks.TryGetValue(deviceCode, out activeTask))
+            {
+                _activeCollectTasks.Remove(deviceCode);
+            }
+        }
+
+        if (session is null)
+        {
+            return;
+        }
+
+        if (activeTask is { IsCompleted: false })
+        {
+            _ = activeTask.ContinueWith(
+                _ => DisposeSessionSafe(session, deviceCode),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            return;
+        }
+
+        DisposeSessionSafe(session, deviceCode);
+    }
+
+    private void DisposeSessionSafe(FanucMachineSession session, string deviceCode)
+    {
+        try
+        {
+            session.Dispose();
+        }
+        catch (Exception exception)
+        {
+            _logger.LogDebug(exception, "Dispose session failed for {DeviceCode}", deviceCode);
         }
     }
 
