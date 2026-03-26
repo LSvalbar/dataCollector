@@ -224,7 +224,11 @@ public sealed class Worker : BackgroundService
 
         try
         {
-            var snapshot = await Task.Run(session.Collect, stoppingToken);
+            var snapshot = await Task.Factory.StartNew(
+                session.Collect,
+                CancellationToken.None,
+                TaskCreationOptions.DenyChildAttach | TaskCreationOptions.LongRunning,
+                TaskScheduler.Default);
             if (snapshot is null)
             {
                 return;

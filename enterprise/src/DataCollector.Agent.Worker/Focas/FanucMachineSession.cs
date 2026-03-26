@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Net.Sockets;
 using DataCollector.Contracts;
 
 namespace DataCollector.Agent.Worker.Focas;
@@ -182,6 +183,8 @@ internal sealed class FanucMachineSession : IDisposable
             return;
         }
 
+        ProbeEndpointReachable();
+
         var result = FanucNative.cnc_allclibhndl3(_machine.IpAddress, (ushort)_machine.Port, _machine.TimeoutSeconds, out _handle);
         if (result != FanucNative.EwOk)
         {
@@ -189,6 +192,19 @@ internal sealed class FanucMachineSession : IDisposable
         }
 
         _connected = true;
+    }
+
+    private void ProbeEndpointReachable()
+    {
+        using var tcpClient = new TcpClient();
+        var connectTask = tcpClient.ConnectAsync(_machine.IpAddress, _machine.Port);
+        var probeTimeout = TimeSpan.FromMilliseconds(Math.Clamp(_machine.TimeoutSeconds * 1000, 1000, 2000));
+        if (!connectTask.Wait(probeTimeout))
+        {
+            throw new TimeoutException($"TCP 预检超时：{_machine.IpAddress}:{_machine.Port}");
+        }
+
+        connectTask.GetAwaiter().GetResult();
     }
 
     private void Disconnect()

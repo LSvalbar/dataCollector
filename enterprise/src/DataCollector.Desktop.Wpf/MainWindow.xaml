@@ -21,6 +21,15 @@
                            Text="{Binding Title}" />
             </StackPanel>
         </HierarchicalDataTemplate>
+        <HierarchicalDataTemplate DataType="{x:Type local:SecurityTreeNode}" ItemsSource="{Binding Children}">
+            <StackPanel Orientation="Horizontal" Margin="0,1,0,1" ToolTip="{Binding Subtitle}">
+                <TextBlock VerticalAlignment="Center"
+                           FontSize="12.5"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           Text="{Binding Title}" />
+            </StackPanel>
+        </HierarchicalDataTemplate>
     </Window.Resources>
 
     <Grid>
@@ -507,7 +516,6 @@
                                     </ContextMenu>
                                 </DataGrid.ContextMenu>
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="角色编码" Binding="{Binding RoleCode}" Width="100" />
                                     <DataGridTextColumn Header="角色名称" Binding="{Binding RoleName}" Width="120" />
                                     <DataGridTextColumn Header="说明" Binding="{Binding Description}" Width="180" />
                                     <DataGridTextColumn Header="权限数量" Binding="{Binding PermissionCount}" Width="90" />
@@ -518,7 +526,6 @@
                         <GroupBox Grid.Row="5" Header="权限">
                             <DataGrid x:Name="PermissionsGrid">
                                 <DataGrid.Columns>
-                                    <DataGridTextColumn Header="权限编码" Binding="{Binding PermissionCode}" Width="120" />
                                     <DataGridTextColumn Header="权限名称" Binding="{Binding PermissionName}" Width="110" />
                                     <DataGridTextColumn Header="说明" Binding="{Binding Description}" Width="180" />
                                 </DataGrid.Columns>

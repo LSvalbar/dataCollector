@@ -12,11 +12,13 @@ public partial class RoleEditorWindow : Window
         InitializeComponent();
         WindowLayoutHelper.EnableResponsiveSizing(this, 0.78, 0.88);
         _permissionOptions = availablePermissions
-            .OrderBy(permission => permission.PermissionCode, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(permission => permission.PermissionName, StringComparer.OrdinalIgnoreCase)
             .Select(permission => new SelectableOption
             {
                 Code = permission.PermissionCode,
-                DisplayText = $"{permission.PermissionCode} - {permission.PermissionName}",
+                DisplayText = string.IsNullOrWhiteSpace(permission.Description)
+                    ? permission.PermissionName
+                    : $"{permission.PermissionName} - {permission.Description}",
                 IsSelected = role?.Permissions.Any(item => item.PermissionCode.Equals(permission.PermissionCode, StringComparison.OrdinalIgnoreCase)) ?? false,
             })
             .ToList();
