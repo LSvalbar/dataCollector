@@ -101,7 +101,7 @@ public partial class MainWindow : Window
                 {
                     MessageBox.Show(
                         this,
-                        "未连接到正式服务端，请先启动服务端 API。",
+                    "未连接到正式服务端，请先启动服务端。",
                         "服务不可用",
                         MessageBoxButton.OK,
                         MessageBoxImage.Warning);
@@ -192,7 +192,7 @@ public partial class MainWindow : Window
                 : response.Rows.FirstOrDefault() is { } firstRow
                     ? $"{firstRow.DeviceCode} / {firstRow.DeviceName}"
                     : "未选择设备";
-            ReportSummaryTextBlock.Text = $"统计区间：{response.ReportDateFrom:yyyy-MM-dd} 至 {response.ReportDateTo:yyyy-MM-dd} | {scopeText} | 快照 {response.SnapshotAt:yyyy-MM-dd HH:mm:ss}";
+            ReportSummaryTextBlock.Text = string.Empty;
             DailyReportGrid.ItemsSource = response.Rows.Select(ToReportGridRow).ToList();
         }
         catch (Exception exception)
@@ -734,7 +734,7 @@ public partial class MainWindow : Window
         var filteredDevices = GetFilteredDevices();
         var scopeLabel = ResolveScopeLabel(filteredDevices);
         ScopeSummaryTextBlock.Text = scopeLabel;
-        OverviewSummaryTextBlock.Text = $"共 {filteredDevices.Count} 台设备 | 快照时间 {snapshotAt:yyyy-MM-dd HH:mm:ss} | 自动刷新 1 秒";
+        OverviewSummaryTextBlock.Text = $"共 {filteredDevices.Count} 台设备 | 更新时间 {snapshotAt:yyyy-MM-dd HH:mm:ss} | 自动刷新 1 秒";
         DrawScopeCards(filteredDevices);
 
         var previousSelectedId = (DevicesGrid.SelectedItem as DeviceGridRow)?.DeviceId;
@@ -1570,7 +1570,7 @@ public partial class MainWindow : Window
             "native_preferred" => "原生优先",
             "focas_realtime" => "实时采集",
             "focas_error" => "采集异常",
-            "stale_snapshot" => "快照滞后",
+            "stale_snapshot" => "采集延迟",
             "manual_disabled" => "手动停用",
             "not_collected" => "未采集",
             "fallback" => "回退计算",

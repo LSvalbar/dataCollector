@@ -73,7 +73,7 @@ public partial class DeviceEditorWindow : Window
         {
             MessageBox.Show(
                 this,
-                "部门名称、车间名称、设备编码、设备名称、IP 地址和 Agent 节点不能为空。",
+                "部门名称、车间名称、设备编码、设备名称、IP 地址和采集节点不能为空。",
                 "校验失败",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);

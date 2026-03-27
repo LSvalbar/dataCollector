@@ -19,7 +19,9 @@ public partial class MainWindow : Window
 
         var settings = LauncherSettings.Load(_settingsPath);
         ServerBaseUrlTextBox.Text = settings.ServerBaseUrl;
-        AgentNodeNameTextBox.Text = settings.AgentNodeName;
+        AgentNodeNameTextBox.Text = string.IsNullOrWhiteSpace(settings.AgentNodeName)
+            ? "W01-采集端"
+            : settings.AgentNodeName;
     }
 
     private void SaveButton_Click(object sender, RoutedEventArgs e)
@@ -73,7 +75,7 @@ public partial class MainWindow : Window
         var executablePath = Path.Combine(workingDirectory, executableName);
         if (!File.Exists(executablePath))
         {
-            MessageBox.Show(this, $"未找到 {executablePath}", "启动失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, $"未找到：{executablePath}", "启动失败", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
 
@@ -100,7 +102,7 @@ public partial class MainWindow : Window
         var settings = new LauncherSettings
         {
             ServerBaseUrl = string.IsNullOrWhiteSpace(ServerBaseUrlTextBox.Text) ? "http://localhost:5180" : ServerBaseUrlTextBox.Text.Trim(),
-            AgentNodeName = string.IsNullOrWhiteSpace(AgentNodeNameTextBox.Text) ? "W01-Agent" : AgentNodeNameTextBox.Text.Trim(),
+            AgentNodeName = string.IsNullOrWhiteSpace(AgentNodeNameTextBox.Text) ? "W01-采集端" : AgentNodeNameTextBox.Text.Trim(),
         };
         settings.Save(_settingsPath);
     }

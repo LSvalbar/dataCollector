@@ -68,7 +68,7 @@
                         <TextBox x:Name="PortTextBox" Width="140" HorizontalAlignment="Left" />
                         <TextBlock Margin="0,8,0,0"
                                    Foreground="{StaticResource TextSecondaryBrush}"
-                                   Text="Agent 节点" />
+                                   Text="采集节点" />
                         <ComboBox x:Name="AgentNodeComboBox"
                                   Margin="0,8,0,0"
                                   IsEditable="True"

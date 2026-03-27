@@ -224,7 +224,8 @@
                                        VerticalAlignment="Center"
                                        FontWeight="SemiBold"
                                        Foreground="{StaticResource TextPrimaryBrush}"
-                                       Text="日报快照：-" />
+                                       Visibility="Collapsed"
+                                       Text="" />
                         </DockPanel>
                     </Border>
 
