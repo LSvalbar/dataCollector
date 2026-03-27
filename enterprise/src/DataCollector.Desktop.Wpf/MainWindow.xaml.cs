@@ -352,6 +352,109 @@ public partial class MainWindow : Window
                 _securityOverview.Users
                     .OrderBy(user => user.Department, StringComparer.OrdinalIgnoreCase)
                     .ThenBy(user => user.UserCode, StringComparer.OrdinalIgnoreCase)
+                    .Select(user => $"U:{NormalizeDepartmentName(user.Department)}:{user.UserCode}:{user.UserName}:{user.DisplayName}:{string.Join(",", user.RoleCodes.OrderBy(code => code, StringComparer.OrdinalIgnoreCase))}"));
+            securitySignature += "||" + string.Join(
+                "|",
+                _securityOverview.Roles
+                    .OrderBy(role => role.RoleCode, StringComparer.OrdinalIgnoreCase)
+                    .Select(role => $"R:{role.RoleCode}:{role.RoleName}:{role.Description}:{string.Join(",", role.Permissions.Select(permission => permission.PermissionCode).OrderBy(code => code, StringComparer.OrdinalIgnoreCase))}"));
+            securitySignature += "||" + string.Join(
+                "|",
+                _securityOverview.Permissions
+                    .OrderBy(permission => permission.PermissionCode, StringComparer.OrdinalIgnoreCase)
+                    .Select(permission => $"P:{permission.PermissionCode}:{permission.PermissionName}:{permission.Description}"));
+
+            if (securitySignature == _securityTreeSignature)
+            {
+                return;
+            }
+
+            _securityTreeSignature = securitySignature;
+
+            var securityUserRoot = new SecurityTreeNode
+            {
+                NodeType = SecurityTreeNodeType.UsersRoot,
+                NodeKey = "users-root",
+                Title = $"用户 ({_securityOverview.Users.Count})",
+                Subtitle = "按部门查看用户",
+                Children = _securityOverview.Users
+                    .GroupBy(user => NormalizeDepartmentName(user.Department), StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(group => new SecurityTreeNode
+                    {
+                        NodeType = SecurityTreeNodeType.Department,
+                        NodeKey = $"department:{group.Key}",
+                        Title = $"{group.Key} ({group.Count()})",
+                        Subtitle = $"共 {group.Count()} 个用户",
+                        DepartmentName = group.Key,
+                        Children = group
+                            .OrderBy(user => string.IsNullOrWhiteSpace(user.DisplayName) ? user.UserName : user.DisplayName, StringComparer.OrdinalIgnoreCase)
+                            .Select(user => new SecurityTreeNode
+                            {
+                                NodeType = SecurityTreeNodeType.User,
+                                NodeKey = $"user:{user.UserCode}",
+                                Title = string.IsNullOrWhiteSpace(user.DisplayName) ? user.UserName : user.DisplayName,
+                                Subtitle = BuildRoleDisplayText(user.RoleCodes, roleNameMap),
+                                DepartmentName = NormalizeDepartmentName(user.Department),
+                                UserCode = user.UserCode,
+                            })
+                            .ToList(),
+                    })
+                    .ToList(),
+            };
+
+            var securityRoleRoot = new SecurityTreeNode
+            {
+                NodeType = SecurityTreeNodeType.RolesRoot,
+                NodeKey = "roles-root",
+                Title = $"角色 ({_securityOverview.Roles.Count})",
+                Subtitle = "查看角色与权限",
+                Children = _securityOverview.Roles
+                    .OrderBy(role => role.RoleName, StringComparer.OrdinalIgnoreCase)
+                    .Select(role => new SecurityTreeNode
+                    {
+                        NodeType = SecurityTreeNodeType.Role,
+                        NodeKey = $"role:{role.RoleCode}",
+                        Title = role.RoleName,
+                        Subtitle = role.Description,
+                        RoleCode = role.RoleCode,
+                    })
+                    .ToList(),
+            };
+
+            var securityPermissionRoot = new SecurityTreeNode
+            {
+                NodeType = SecurityTreeNodeType.PermissionsRoot,
+                NodeKey = "permissions-root",
+                Title = $"权限 ({_securityOverview.Permissions.Count})",
+                Subtitle = "查看权限与授权关系",
+                Children = _securityOverview.Permissions
+                    .OrderBy(permission => permission.PermissionName, StringComparer.OrdinalIgnoreCase)
+                    .Select(permission => new SecurityTreeNode
+                    {
+                        NodeType = SecurityTreeNodeType.Permission,
+                        NodeKey = $"permission:{permission.PermissionCode}",
+                        Title = permission.PermissionName,
+                        Subtitle = permission.Description,
+                        PermissionCode = permission.PermissionCode,
+                    })
+                    .ToList(),
+            };
+
+            var securityNodes = new List<SecurityTreeNode> { securityUserRoot, securityRoleRoot, securityPermissionRoot };
+            SecurityTreeView.ItemsSource = securityNodes;
+            _selectedSecurityTreeNode = TryFindSecurityNode(securityNodes, _selectedSecurityTreeNode?.NodeKey) ?? securityUserRoot;
+            return;
+        }
+
+        if (Environment.TickCount != int.MinValue)
+        {
+            var roleNameMap = BuildRoleNameMap(_securityOverview.Roles);
+            var securitySignature = string.Join(
+                "|",
+                _securityOverview.Users
+                    .OrderBy(user => user.Department, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(user => user.UserCode, StringComparer.OrdinalIgnoreCase)
                     .Select(user => $"U:{user.Department}:{user.UserCode}:{user.UserName}:{user.DisplayName}:{string.Join(",", user.RoleCodes.OrderBy(code => code, StringComparer.OrdinalIgnoreCase))}"));
             securitySignature += "||" + string.Join(
                 "|",
@@ -505,6 +608,93 @@ public partial class MainWindow : Window
             UsersGrid.ItemsSource = null;
             RolesGrid.ItemsSource = null;
             PermissionsGrid.ItemsSource = null;
+            return;
+        }
+
+        if (Environment.TickCount != int.MinValue)
+        {
+            var selectedSecurityNode = _selectedSecurityTreeNode;
+            IReadOnlyList<UserDto> scopedUsers = _securityOverview.Users;
+            IReadOnlyList<RoleDto> scopedRoles = _securityOverview.Roles;
+            IReadOnlyList<PermissionDto> scopedPermissions = _securityOverview.Permissions;
+            var roleNameMap = BuildRoleNameMap(_securityOverview.Roles);
+            var securitySummary = $"全部用户 {_securityOverview.Users.Count} 个，全部角色 {_securityOverview.Roles.Count} 个，全部权限 {_securityOverview.Permissions.Count} 个";
+
+            switch (selectedSecurityNode?.NodeType)
+            {
+                case SecurityTreeNodeType.UsersRoot:
+                    scopedRoles = CollectRolesForUsers(_securityOverview.Roles, scopedUsers);
+                    scopedPermissions = CollectPermissionsForRoles(scopedRoles);
+                    securitySummary = $"用户：共 {scopedUsers.Count} 个；涉及角色 {scopedRoles.Count} 个；涉及权限 {scopedPermissions.Count} 个";
+                    break;
+                case SecurityTreeNodeType.Department:
+                    scopedUsers = _securityOverview.Users
+                        .Where(user => string.Equals(
+                            NormalizeDepartmentName(user.Department),
+                            selectedSecurityNode.DepartmentName,
+                            StringComparison.OrdinalIgnoreCase))
+                        .OrderBy(user => string.IsNullOrWhiteSpace(user.DisplayName) ? user.UserName : user.DisplayName, StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+                    scopedRoles = CollectRolesForUsers(_securityOverview.Roles, scopedUsers);
+                    scopedPermissions = CollectPermissionsForRoles(scopedRoles);
+                    securitySummary = $"部门：{selectedSecurityNode.DepartmentName}；用户 {scopedUsers.Count} 个；角色 {scopedRoles.Count} 个；权限 {scopedPermissions.Count} 个";
+                    break;
+                case SecurityTreeNodeType.User:
+                    var selectedUser = _securityOverview.Users.FirstOrDefault(user =>
+                        string.Equals(user.UserCode, selectedSecurityNode.UserCode, StringComparison.OrdinalIgnoreCase));
+                    if (selectedUser is not null)
+                    {
+                        scopedUsers = [selectedUser];
+                        scopedRoles = CollectRolesForUsers(_securityOverview.Roles, scopedUsers);
+                        scopedPermissions = CollectPermissionsForRoles(scopedRoles);
+                        var displayName = string.IsNullOrWhiteSpace(selectedUser.DisplayName) ? selectedUser.UserName : selectedUser.DisplayName;
+                        securitySummary = $"用户：{displayName}；角色 {scopedRoles.Count} 个；权限 {scopedPermissions.Count} 个";
+                    }
+
+                    break;
+                case SecurityTreeNodeType.RolesRoot:
+                    scopedUsers = CollectUsersForRoles(_securityOverview.Users, scopedRoles);
+                    scopedPermissions = CollectPermissionsForRoles(scopedRoles);
+                    securitySummary = $"角色：共 {scopedRoles.Count} 个；覆盖用户 {scopedUsers.Count} 个；覆盖权限 {scopedPermissions.Count} 个";
+                    break;
+                case SecurityTreeNodeType.Role:
+                    var selectedRole = _securityOverview.Roles.FirstOrDefault(role =>
+                        string.Equals(role.RoleCode, selectedSecurityNode.RoleCode, StringComparison.OrdinalIgnoreCase));
+                    if (selectedRole is not null)
+                    {
+                        scopedRoles = [selectedRole];
+                        scopedUsers = CollectUsersForRoles(_securityOverview.Users, scopedRoles);
+                        scopedPermissions = CollectPermissionsForRoles(scopedRoles);
+                        securitySummary = $"角色：{selectedRole.RoleName}；成员用户 {scopedUsers.Count} 个；权限 {scopedPermissions.Count} 个";
+                    }
+
+                    break;
+                case SecurityTreeNodeType.PermissionsRoot:
+                    scopedRoles = CollectRolesForPermissions(_securityOverview.Roles, scopedPermissions);
+                    scopedUsers = CollectUsersForRoles(_securityOverview.Users, scopedRoles);
+                    securitySummary = $"权限：共 {scopedPermissions.Count} 个；覆盖角色 {scopedRoles.Count} 个；覆盖用户 {scopedUsers.Count} 个";
+                    break;
+                case SecurityTreeNodeType.Permission:
+                    var selectedPermission = _securityOverview.Permissions.FirstOrDefault(permission =>
+                        string.Equals(permission.PermissionCode, selectedSecurityNode.PermissionCode, StringComparison.OrdinalIgnoreCase));
+                    if (selectedPermission is not null)
+                    {
+                        scopedPermissions = [selectedPermission];
+                        scopedRoles = CollectRolesForPermissions(_securityOverview.Roles, scopedPermissions);
+                        scopedUsers = CollectUsersForRoles(_securityOverview.Users, scopedRoles);
+                        securitySummary = $"权限：{selectedPermission.PermissionName}；角色 {scopedRoles.Count} 个；用户 {scopedUsers.Count} 个";
+                    }
+
+                    break;
+            }
+
+            SecurityScopeSummaryTextBlock.Text = securitySummary;
+            UsersGrid.ItemsSource = scopedUsers.Select(user => ToUserGridRow(user, roleNameMap)).ToList();
+            RolesGrid.ItemsSource = scopedRoles.Select(ToRoleGridRow).ToList();
+            PermissionsGrid.ItemsSource = scopedPermissions
+                .OrderBy(permission => permission.PermissionName, StringComparer.OrdinalIgnoreCase)
+                .Select(ToPermissionGridRow)
+                .ToList();
             return;
         }
 
@@ -1421,6 +1611,64 @@ public partial class MainWindow : Window
                 StringComparer.OrdinalIgnoreCase);
     }
 
+    private static string NormalizeDepartmentName(string? department)
+    {
+        return string.IsNullOrWhiteSpace(department) ? "未分配部门" : department.Trim();
+    }
+
+    private static IReadOnlyList<RoleDto> CollectRolesForUsers(IEnumerable<RoleDto> allRoles, IEnumerable<UserDto> users)
+    {
+        var roleCodes = users
+            .SelectMany(user => user.RoleCodes)
+            .Where(roleCode => !string.IsNullOrWhiteSpace(roleCode))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return allRoles
+            .Where(role => roleCodes.Contains(role.RoleCode))
+            .OrderBy(role => role.RoleName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<PermissionDto> CollectPermissionsForRoles(IEnumerable<RoleDto> roles)
+    {
+        return roles
+            .SelectMany(role => role.Permissions)
+            .Where(permission => !string.IsNullOrWhiteSpace(permission.PermissionCode))
+            .GroupBy(permission => permission.PermissionCode, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderBy(permission => permission.PermissionName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<RoleDto> CollectRolesForPermissions(IEnumerable<RoleDto> allRoles, IEnumerable<PermissionDto> permissions)
+    {
+        var permissionCodes = permissions
+            .Where(permission => !string.IsNullOrWhiteSpace(permission.PermissionCode))
+            .Select(permission => permission.PermissionCode)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return allRoles
+            .Where(role => role.Permissions.Any(permission => permissionCodes.Contains(permission.PermissionCode)))
+            .OrderBy(role => role.RoleName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<UserDto> CollectUsersForRoles(IEnumerable<UserDto> allUsers, IEnumerable<RoleDto> roles)
+    {
+        var roleCodes = roles
+            .Where(role => !string.IsNullOrWhiteSpace(role.RoleCode))
+            .Select(role => role.RoleCode)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return allUsers
+            .Where(user => user.RoleCodes.Any(roleCode => roleCodes.Contains(roleCode)))
+            .OrderBy(user => string.IsNullOrWhiteSpace(user.DisplayName) ? user.UserName : user.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     private static string BuildRoleDisplayText(IEnumerable<string> roleCodes, IReadOnlyDictionary<string, string> roleNameMap)
     {
         var roleNames = roleCodes
@@ -2182,6 +2430,8 @@ public enum SecurityTreeNodeType
     User = 2,
     RolesRoot = 3,
     Role = 4,
+    PermissionsRoot = 5,
+    Permission = 6,
 }
 
 public sealed class SecurityTreeNode
@@ -2199,6 +2449,8 @@ public sealed class SecurityTreeNode
     public string? UserCode { get; init; }
 
     public string? RoleCode { get; init; }
+
+    public string? PermissionCode { get; init; }
 
     public List<SecurityTreeNode> Children { get; init; } = [];
 
